@@ -13,6 +13,7 @@ using SaaSForge.Api.Services.Ai;
 using SaaSForge.Api.Services.Auth;
 using SaaSForge.Api.Services.Business;
 using SaaSForge.Api.Services.Common;
+using SaaSForge.Api.Services.Usage;
 using System.ClientModel;
 using System.Text;
 // using OpenAI.Chat; // (If you reference typed Chat client elsewhere)
@@ -129,6 +130,7 @@ builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IBusinessService, BusinessService>();
 builder.Services.AddScoped<IAiService, AiService>();
+builder.Services.AddScoped<IUsageService, UsageService>();
 
 
 // ✅ Bind ExpoPush from appsettings.json using ONE options class (Configurations)

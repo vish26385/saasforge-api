@@ -15,6 +15,8 @@ namespace SaaSForge.Api.Data
         public DbSet<UserDeviceToken> UserDeviceTokens => Set<UserDeviceToken>();
         public DbSet<Business> Businesses { get; set; }
         public DbSet<AiConversation> AiConversations { get; set; }
+        public DbSet<SubscriptionPlan> SubscriptionPlans { get; set; }
+        public DbSet<BusinessUsage> BusinessUsages { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -92,6 +94,72 @@ namespace SaaSForge.Api.Data
                     .HasForeignKey(x => x.BusinessId)
                     .OnDelete(DeleteBehavior.Cascade);
             });
+
+            modelBuilder.Entity<SubscriptionPlan>(b =>
+            {
+                b.HasKey(x => x.Id);
+
+                b.Property(x => x.Code)
+                    .IsRequired()
+                    .HasMaxLength(50);
+
+                b.Property(x => x.Name)
+                    .IsRequired()
+                    .HasMaxLength(100);
+
+                b.Property(x => x.MonthlyAiRequestLimit)
+                    .IsRequired();
+
+                b.Property(x => x.IsActive)
+                    .IsRequired();
+
+                b.HasIndex(x => x.Code)
+                    .IsUnique();
+            });
+
+            modelBuilder.Entity<BusinessUsage>(b =>
+            {
+                b.HasKey(x => x.Id);
+
+                b.Property(x => x.PlanCode)
+                    .IsRequired()
+                    .HasMaxLength(50);
+
+                b.Property(x => x.AiRequestsUsed)
+                    .IsRequired();
+
+                b.Property(x => x.AiRequestLimit)
+                    .IsRequired();
+
+                b.HasIndex(x => x.BusinessId)
+                    .IsUnique();
+
+                b.HasOne(x => x.Business)
+                    .WithMany()
+                    .HasForeignKey(x => x.BusinessId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<SubscriptionPlan>().HasData(
+                new SubscriptionPlan
+                {
+                    Id = 1,
+                    Code = "free",
+                    Name = "Free",
+                    MonthlyAiRequestLimit = 50,
+                    IsActive = true,
+                    CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new SubscriptionPlan
+                {
+                    Id = 2,
+                    Code = "pro",
+                    Name = "Pro",
+                    MonthlyAiRequestLimit = 1000,
+                    IsActive = true,
+                    CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+                }
+            );
         }
     }
 }

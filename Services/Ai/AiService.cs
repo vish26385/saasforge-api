@@ -4,6 +4,7 @@ using OpenAI.Chat;
 using SaaSForge.Api.Data;
 using SaaSForge.Api.DTOs.Ai;
 using SaaSForge.Api.Models;
+using SaaSForge.Api.Services.Usage;
 
 namespace SaaSForge.Api.Services.Ai
 {
@@ -11,11 +12,13 @@ namespace SaaSForge.Api.Services.Ai
     {
         private readonly AppDbContext _context;
         private readonly IConfiguration _configuration;
+        private readonly IUsageService _usageService;
 
-        public AiService(AppDbContext context, IConfiguration configuration)
+        public AiService(AppDbContext context, IConfiguration configuration, IUsageService usageService)
         {
             _context = context;
             _configuration = configuration;
+            _usageService = usageService;
         }
 
         public async Task<AskAiResponseDto> AskAsync(string ownerUserId, AskAiRequestDto dto)
@@ -28,6 +31,8 @@ namespace SaaSForge.Api.Services.Ai
             {
                 throw new InvalidOperationException("Business not found for the current user.");
             }
+
+            await _usageService.EnsureCanUseAiAsync(business.Id);
 
             var apiKey = _configuration["OpenAI:ApiKey"];
             if (string.IsNullOrWhiteSpace(apiKey))
@@ -69,6 +74,8 @@ namespace SaaSForge.Api.Services.Ai
 
             _context.AiConversations.Add(entity);
             await _context.SaveChangesAsync();
+
+            await _usageService.IncrementAiUsageAsync(business.Id);
 
             return new AskAiResponseDto
             {
