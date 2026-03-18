@@ -1,149 +1,6 @@
-﻿//using SaaSForge.Api.Models;
-//using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
-//using Microsoft.EntityFrameworkCore;
-//using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-//using Task = SaaSForge.Api._LegacyFlowOS.Models.Task;
-//using SaaSForge.Api._LegacyFlowOS.Models.Audit;
-//using SaaSForge.Api._LegacyFlowOS.Models.Enums;
-//using SaaSForge.Api._LegacyFlowOS.Models;
-
-//namespace SaaSForge.Api.Data
-//{
-//    public class AppDbContext : IdentityDbContext<ApplicationUser>
-//    {
-//        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
-//        {
-//        }
-//        public DbSet<Task> Tasks { get; set; }
-//        public DbSet<DailyPlan> DailyPlans { get; set; }
-//        public DbSet<UserRefreshToken> UserRefreshTokens { get; set; }
-
-//        public DbSet<DailyPlanItem> DailyPlanItems { get; set; }
-//        public DbSet<NudgeFeedback> NudgeFeedback { get; set; }
-
-//        public DbSet<ToneHistory> ToneHistories => Set<ToneHistory>();
-
-//        public DbSet<AiPlanAudit> AiPlanAudits { get; set; }
-//        public DbSet<UserDeviceToken> UserDeviceTokens => Set<UserDeviceToken>();
-//        protected override void OnModelCreating(ModelBuilder modelBuilder)
-//        {
-//            base.OnModelCreating(modelBuilder);
-
-//            modelBuilder.Entity<UserDeviceToken>()
-//            .HasIndex(x => new { x.UserId, x.ExpoPushToken })
-//            .IsUnique();
-
-//            // ---- Enum <-> string converters
-//            var toneConverter = new EnumToStringConverter<PlanTone>();
-
-//            modelBuilder.Entity<ApplicationUser>(b =>
-//            {
-//                b.Property(u => u.PreferredTone).HasConversion(toneConverter);
-//                b.Property(u => u.CurrentTone).HasConversion(toneConverter);
-//            });
-
-//            modelBuilder.Entity<ToneHistory>(b =>
-//            {
-//                b.Property(t => t.SuggestedTone).HasConversion(toneConverter);
-//                b.Property(t => t.AppliedTone).HasConversion(toneConverter);
-
-//                b.HasIndex(t => new { t.UserId, t.Date }).IsUnique(); // one row/day/user
-//                b.Property(t => t.Notes).HasMaxLength(400);
-//            });
-
-//            //modelBuilder.Entity<Task>()
-//            //    .Property(t => t.DueDate)
-//            //    .HasConversion(
-//            //        v => DateTime.SpecifyKind(v, DateTimeKind.Utc),
-//            //        v => DateTime.SpecifyKind(v, DateTimeKind.Utc)
-//            //    );
-
-//            modelBuilder.Entity<Task>()
-//                .Property(t => t.DueDate)
-//                .HasConversion(
-//                    v => DateTime.SpecifyKind(v, DateTimeKind.Utc),
-//                    v => DateTime.SpecifyKind(v, DateTimeKind.Utc)
-//                );
-
-//            modelBuilder.Entity<Task>()
-//                .Property(t => t.NudgeAtUtc)
-//                .HasConversion(
-//                    v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : v,
-//                    v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : v
-//                );
-
-//            modelBuilder.Entity<Task>()
-//                .Property(t => t.NudgeSentAtUtc)
-//                .HasConversion(
-//                    v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : v,
-//                    v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : v
-//                );
-
-//            modelBuilder.Entity<DailyPlan>(entity =>
-//            {
-//                entity.HasMany(p => p.Items)
-//                      .WithOne(i => i.Plan)
-//                      .HasForeignKey(i => i.PlanId)
-//                      .OnDelete(DeleteBehavior.Cascade);
-
-//                // ✅ Ensure one plan per user per date
-//                entity.HasIndex(p => new { p.UserId, p.Date })
-//                      .IsUnique();
-//            });
-
-//            modelBuilder.Entity<DailyPlanItem>()
-//            .HasOne(i => i.Task)
-//            .WithMany()
-//            .HasForeignKey(i => i.TaskId)
-//            .OnDelete(DeleteBehavior.SetNull);
-
-//            modelBuilder.Entity<DailyPlanItem>()
-//                .Property(i => i.Start)
-//                .HasConversion(
-//                    v => DateTime.SpecifyKind(v, DateTimeKind.Utc),
-//                    v => DateTime.SpecifyKind(v, DateTimeKind.Utc)
-//                );
-
-//            modelBuilder.Entity<DailyPlanItem>()
-//                .Property(i => i.End)
-//                .HasConversion(
-//                    v => DateTime.SpecifyKind(v, DateTimeKind.Utc),
-//                    v => DateTime.SpecifyKind(v, DateTimeKind.Utc)
-//                );
-
-//            modelBuilder.Entity<DailyPlanItem>()
-//                .Property(i => i.NudgeAt)
-//                .HasConversion(
-//                    v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : v,
-//                    v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : v
-//                );
-
-//            modelBuilder.Entity<DailyPlanItem>()
-//                .Property(i => i.NudgeSentAtUtc)
-//                .HasConversion(
-//                    v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : v,
-//                    v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : v
-//                );
-
-//            modelBuilder.Entity<DailyPlanItem>()
-//                .Property(i => i.EndNudgeAtUtc)
-//                .HasConversion(
-//                    v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : v,
-//                    v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : v
-//                );
-
-//            modelBuilder.Entity<DailyPlanItem>()
-//                .Property(i => i.EndNudgeSentAtUtc)
-//                .HasConversion(
-//                    v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : v,
-//                    v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : v
-//                );
-//        }
-//    }
-//}
-
-using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using SaaSForge.Api.Models;
 using SaaSForge.Api.Models.Auth;
 
 namespace SaaSForge.Api.Data
@@ -156,6 +13,7 @@ namespace SaaSForge.Api.Data
 
         public DbSet<UserRefreshToken> UserRefreshTokens { get; set; }
         public DbSet<UserDeviceToken> UserDeviceTokens => Set<UserDeviceToken>();
+        public DbSet<Business> Businesses { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -164,6 +22,42 @@ namespace SaaSForge.Api.Data
             modelBuilder.Entity<UserDeviceToken>()
                 .HasIndex(x => new { x.UserId, x.ExpoPushToken })
                 .IsUnique();
+
+            modelBuilder.Entity<Business>(b =>
+            {
+                b.HasKey(x => x.Id);
+
+                b.Property(x => x.Name)
+                    .IsRequired()
+                    .HasMaxLength(150);
+
+                b.Property(x => x.Slug)
+                    .IsRequired()
+                    .HasMaxLength(100);
+
+                b.Property(x => x.Email)
+                    .HasMaxLength(200);
+
+                b.Property(x => x.Phone)
+                    .HasMaxLength(30);
+
+                b.Property(x => x.Address)
+                    .HasMaxLength(300);
+
+                b.Property(x => x.TimeZone)
+                    .HasMaxLength(100);
+
+                b.HasIndex(x => x.OwnerUserId)
+                    .IsUnique();
+
+                b.HasIndex(x => x.Slug)
+                    .IsUnique();
+
+                b.HasOne(x => x.OwnerUser)
+                    .WithMany()
+                    .HasForeignKey(x => x.OwnerUserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
         }
     }
 }

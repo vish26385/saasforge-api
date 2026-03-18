@@ -1,6 +1,4 @@
-﻿using SaaSForge.Api.Configurations;
-using SaaSForge.Api.Data;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -8,11 +6,14 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using OpenAI; // ✅ Official SDK
-using System.ClientModel;
-using System.Text;
+using SaaSForge.Api.Configurations;
+using SaaSForge.Api.Data;
 using SaaSForge.Api.Models.Auth;
 using SaaSForge.Api.Services.Auth;
+using SaaSForge.Api.Services.Business;
 using SaaSForge.Api.Services.Common;
+using System.ClientModel;
+using System.Text;
 // using OpenAI.Chat; // (If you reference typed Chat client elsewhere)
 
 var builder = WebApplication.CreateBuilder(args);
@@ -125,6 +126,7 @@ builder.Services.AddSwaggerGen(c =>
 // ---------------------------
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<IBusinessService, BusinessService>();
 
 
 // ✅ Bind ExpoPush from appsettings.json using ONE options class (Configurations)
