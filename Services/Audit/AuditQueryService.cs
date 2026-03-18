@@ -11,9 +11,9 @@ public interface IAuditQueryService
 
 public class AuditQueryService : IAuditQueryService
 {
-    private readonly FlowOSContext _context;
+    private readonly AppDbContext _context;
 
-    public AuditQueryService(FlowOSContext context)
+    public AuditQueryService(AppDbContext context)
     {
         _context = context;
     }

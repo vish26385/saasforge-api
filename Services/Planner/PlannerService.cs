@@ -26,7 +26,7 @@ namespace SaaSForge.Api.Services.Planner
     /// </summary>
     public class PlannerService : IPlannerService
     {
-        private readonly FlowOSContext _context;
+        private readonly AppDbContext _context;
         private readonly OpenAIPlannerService _aiPlanner; // Hybrid DI (concrete for OpenAI features)
         private readonly ILogger<PlannerService> _logger;
 
@@ -36,7 +36,7 @@ namespace SaaSForge.Api.Services.Planner
         private const double MinAlignedThreshold = 50.0;    // % of tasks planned
 
         public PlannerService(
-            FlowOSContext context,
+            AppDbContext context,
             OpenAIPlannerService aiPlanner,
             ILogger<PlannerService> logger)
         {

@@ -16,8 +16,8 @@ namespace SaaSForge.Api.Controllers
     public class DailyPlanController : ControllerBase
     {
 
-        private readonly FlowOSContext _context;
-        public DailyPlanController(FlowOSContext context)
+        private readonly AppDbContext _context;
+        public DailyPlanController(AppDbContext context)
         {
             _context = context;
         }

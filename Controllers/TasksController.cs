@@ -14,9 +14,9 @@ namespace SaaSForge.Api.Controllers
     [Authorize]  // Require login
     public class TasksController : ControllerBase
     {
-        private readonly FlowOSContext _context;
+        private readonly AppDbContext _context;
 
-        public TasksController(FlowOSContext context)
+        public TasksController(AppDbContext context)
         {
             _context = context;
         }

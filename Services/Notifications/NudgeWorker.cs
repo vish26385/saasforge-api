@@ -75,7 +75,7 @@
 //        private async Task RunOnce(CancellationToken ct)
 //        {
 //            using var scope = _scopeFactory.CreateScope();
-//            var db = scope.ServiceProvider.GetRequiredService<FlowOSContext>();
+//            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 //            var push = scope.ServiceProvider.GetRequiredService<ExpoPushClient>();
 
 //            var nowUtc = DateTime.UtcNow;
@@ -311,7 +311,7 @@
 
 //        // ----------------- STALE SKIP HELPERS -----------------
 
-//        private static async Task SkipStaleStartNudges(FlowOSContext db, DateTime nowUtc, CancellationToken ct)
+//        private static async Task SkipStaleStartNudges(AppDbContext db, DateTime nowUtc, CancellationToken ct)
 //        {
 //            await db.DailyPlanItems
 //                .Where(i =>
@@ -325,7 +325,7 @@
 //                    ct);
 //        }
 
-//        private static async Task SkipStaleEndNudges(FlowOSContext db, DateTime nowUtc, CancellationToken ct)
+//        private static async Task SkipStaleEndNudges(AppDbContext db, DateTime nowUtc, CancellationToken ct)
 //        {
 //            await db.DailyPlanItems
 //                .Where(i =>
@@ -342,7 +342,7 @@
 //        // ----------------- CLAIM HELPERS (atomic, short locks) -----------------
 
 //        private static async Task<bool> ClaimStartNudge(
-//            FlowOSContext db,
+//            AppDbContext db,
 //            int itemId,
 //            DateTime nowUtc,
 //            DateTime lookAheadUtc,
@@ -366,7 +366,7 @@
 //        }
 
 //        private static async Task<bool> ClaimEndNudge(
-//            FlowOSContext db,
+//            AppDbContext db,
 //            int itemId,
 //            DateTime nowUtc,
 //            DateTime lookAheadUtc,
@@ -389,7 +389,7 @@
 //            return rows == 1;
 //        }
 
-//        private static async Task RevertStartClaim(FlowOSContext db, int itemId, string error, CancellationToken ct)
+//        private static async Task RevertStartClaim(AppDbContext db, int itemId, string error, CancellationToken ct)
 //        {
 //            await db.DailyPlanItems
 //                .Where(i => i.Id == itemId && i.NudgeSentAtUtc != null)
@@ -399,7 +399,7 @@
 //                    ct);
 //        }
 
-//        private static async Task RevertEndClaim(FlowOSContext db, int itemId, string error, CancellationToken ct)
+//        private static async Task RevertEndClaim(AppDbContext db, int itemId, string error, CancellationToken ct)
 //        {
 //            await db.DailyPlanItems
 //                .Where(i => i.Id == itemId && i.EndNudgeSentAtUtc != null)
@@ -409,7 +409,7 @@
 //                    ct);
 //        }
 
-//        private static async Task SafeSetLastError(FlowOSContext db, int itemId, string error, CancellationToken ct)
+//        private static async Task SafeSetLastError(AppDbContext db, int itemId, string error, CancellationToken ct)
 //        {
 //            await db.DailyPlanItems
 //                .Where(i => i.Id == itemId)
@@ -418,7 +418,7 @@
 //                    ct);
 //        }
 
-//        private static async Task ClearLastError(FlowOSContext db, int itemId, CancellationToken ct)
+//        private static async Task ClearLastError(AppDbContext db, int itemId, CancellationToken ct)
 //        {
 //            await db.DailyPlanItems
 //                .Where(i => i.Id == itemId)
@@ -531,7 +531,7 @@ namespace SaaSForge.Api.Services.Notifications
         private async Task RunOnce(CancellationToken ct)
         {
             using var scope = _scopeFactory.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<FlowOSContext>();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var push = scope.ServiceProvider.GetRequiredService<ExpoPushClient>();
 
             var nowUtc = DateTime.UtcNow;
@@ -768,7 +768,7 @@ namespace SaaSForge.Api.Services.Notifications
         // ----------------- STALE SKIP HELPERS -----------------
 
         // ✅ skip only very old missed nudges (older than grace window)
-        private static async Task SkipVeryOldStartNudges(FlowOSContext db, DateTime graceStartUtc, CancellationToken ct)
+        private static async Task SkipVeryOldStartNudges(AppDbContext db, DateTime graceStartUtc, CancellationToken ct)
         {
             await db.DailyPlanItems
                 .Where(i =>
@@ -782,7 +782,7 @@ namespace SaaSForge.Api.Services.Notifications
                     ct);
         }
 
-        private static async Task SkipVeryOldEndNudges(FlowOSContext db, DateTime graceStartUtc, CancellationToken ct)
+        private static async Task SkipVeryOldEndNudges(AppDbContext db, DateTime graceStartUtc, CancellationToken ct)
         {
             await db.DailyPlanItems
                 .Where(i =>
@@ -799,7 +799,7 @@ namespace SaaSForge.Api.Services.Notifications
         // ----------------- CLAIM HELPERS -----------------
 
         private static async Task<bool> ClaimStartNudge(
-            FlowOSContext db,
+            AppDbContext db,
             int itemId,
             DateTime nowUtc,
             DateTime graceStartUtc,
@@ -824,7 +824,7 @@ namespace SaaSForge.Api.Services.Notifications
         }
 
         private static async Task<bool> ClaimEndNudge(
-            FlowOSContext db,
+            AppDbContext db,
             int itemId,
             DateTime nowUtc,
             DateTime graceStartUtc,
@@ -848,7 +848,7 @@ namespace SaaSForge.Api.Services.Notifications
             return rows == 1;
         }
 
-        private static async Task RevertStartClaim(FlowOSContext db, int itemId, string error, CancellationToken ct)
+        private static async Task RevertStartClaim(AppDbContext db, int itemId, string error, CancellationToken ct)
         {
             await db.DailyPlanItems
                 .Where(i => i.Id == itemId && i.NudgeSentAtUtc != null)
@@ -858,7 +858,7 @@ namespace SaaSForge.Api.Services.Notifications
                     ct);
         }
 
-        private static async Task RevertEndClaim(FlowOSContext db, int itemId, string error, CancellationToken ct)
+        private static async Task RevertEndClaim(AppDbContext db, int itemId, string error, CancellationToken ct)
         {
             await db.DailyPlanItems
                 .Where(i => i.Id == itemId && i.EndNudgeSentAtUtc != null)
@@ -868,7 +868,7 @@ namespace SaaSForge.Api.Services.Notifications
                     ct);
         }
 
-        private static async Task SafeSetLastError(FlowOSContext db, int itemId, string error, CancellationToken ct)
+        private static async Task SafeSetLastError(AppDbContext db, int itemId, string error, CancellationToken ct)
         {
             await db.DailyPlanItems
                 .Where(i => i.Id == itemId)
@@ -877,7 +877,7 @@ namespace SaaSForge.Api.Services.Notifications
                     ct);
         }
 
-        private static async Task ClearLastError(FlowOSContext db, int itemId, CancellationToken ct)
+        private static async Task ClearLastError(AppDbContext db, int itemId, CancellationToken ct)
         {
             await db.DailyPlanItems
                 .Where(i => i.Id == itemId)

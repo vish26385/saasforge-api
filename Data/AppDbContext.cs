@@ -8,9 +8,9 @@ using Task = SaaSForge.Api.Models.Task;
 
 namespace SaaSForge.Api.Data
 {
-    public class FlowOSContext : IdentityDbContext<ApplicationUser>
+    public class AppDbContext : IdentityDbContext<ApplicationUser>
     {
-        public FlowOSContext(DbContextOptions<FlowOSContext> options) : base(options)
+        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
         {
         }
         public DbSet<Task> Tasks { get; set; }

@@ -18,14 +18,14 @@
 //{
 //    public partial class OpenAIPlannerService //: IPlannerService
 //    {
-//        private readonly FlowOSContext _context;
+//        private readonly AppDbContext _context;
 //        private readonly OpenAISettings _settings;
 //        private readonly ILogger<OpenAIPlannerService> _logger;
 //        private readonly OpenAIClient _openAIClient;
 
 //        #region Constructor
 //        public OpenAIPlannerService(
-//            FlowOSContext context,
+//            AppDbContext context,
 //            IOptions<OpenAISettings> settings,
 //            OpenAIClient openAIClient,
 //            ILogger<OpenAIPlannerService> logger)

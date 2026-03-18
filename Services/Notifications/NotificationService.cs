@@ -11,9 +11,9 @@
 
 //    public class NotificationService : INotificationService
 //    {
-//        private readonly FlowOSContext _db;
+//        private readonly AppDbContext _db;
 
-//        public NotificationService(FlowOSContext db)
+//        public NotificationService(AppDbContext db)
 //        {
 //            _db = db;
 //        }
@@ -57,9 +57,9 @@ namespace SaaSForge.Api.Services.Notifications
 
     public class NotificationService : INotificationService
     {
-        private readonly FlowOSContext _db;
+        private readonly AppDbContext _db;
 
-        public NotificationService(FlowOSContext db)
+        public NotificationService(AppDbContext db)
         {
             _db = db;
         }

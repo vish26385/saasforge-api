@@ -23,14 +23,14 @@ namespace SaaSForge.Api.Controllers
         private readonly IConfiguration _config;
         private static readonly Dictionary<string, string> _refreshTokens = new(); // demo in-memory store
         private readonly TokenService _tokenService;
-        private readonly FlowOSContext _context;
+        private readonly AppDbContext _context;
         private readonly IEmailService _emailService;
 
         public AuthController(UserManager<ApplicationUser> userManager,
                               RoleManager<IdentityRole> roleManager,
                               IConfiguration config, 
                               TokenService tokenService, 
-                              FlowOSContext context,
+                              AppDbContext context,
                               IEmailService emailService
                               )
         {
