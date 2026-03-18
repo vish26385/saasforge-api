@@ -1,9 +1,5 @@
 ﻿using SaaSForge.Api.Configurations;
 using SaaSForge.Api.Data;
-using SaaSForge.Api.Models;
-using SaaSForge.Api.Services;
-using SaaSForge.Api.Services.Notifications;
-using SaaSForge.Api.Services.Planner;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
@@ -14,6 +10,9 @@ using Microsoft.OpenApi.Models;
 using OpenAI; // ✅ Official SDK
 using System.ClientModel;
 using System.Text;
+using SaaSForge.Api.Models.Auth;
+using SaaSForge.Api.Services.Auth;
+using SaaSForge.Api.Services.Common;
 // using OpenAI.Chat; // (If you reference typed Chat client elsewhere)
 
 var builder = WebApplication.CreateBuilder(args);
@@ -80,20 +79,6 @@ builder.Services.AddAuthentication(options =>
 // ---------------------------
 // 4) CORS (Expo / Web / Mobile)
 // ---------------------------
-//builder.Services.AddCors(options =>
-//{
-//    options.AddPolicy("AllowAll", policy =>
-//    {
-//        policy
-//            .AllowAnyOrigin()   // Safe because you're not using cookies/credentials
-//            .AllowAnyHeader()
-//            .AllowAnyMethod();
-//    });
-//});
-
-// ---------------------------
-// 4) CORS (Expo / Web / Mobile)
-// ---------------------------
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll",
@@ -140,68 +125,12 @@ builder.Services.AddSwaggerGen(c =>
 // ---------------------------
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
-builder.Services.AddScoped<IAuditQueryService, AuditQueryService>();
-builder.Services.AddScoped<INotificationService, NotificationService>();
 
-// Orchestrator visible to the app:
-builder.Services.AddScoped<IPlannerService, PlannerService>();
-
-// Concrete AI engine (partial class files) — always add
-// (PlannerService will call it; config may decide behavior inside)
-builder.Services.AddScoped<OpenAIPlannerService>();
-
-// HttpClient for any REST the AI service might perform
-builder.Services.AddHttpClient<OpenAIPlannerService>();
 
 // ✅ Bind ExpoPush from appsettings.json using ONE options class (Configurations)
 builder.Services.Configure<ExpoPushOptions>(
     builder.Configuration.GetSection("ExpoPush")
 );
-
-// ✅ Expo client + worker
-builder.Services.AddHttpClient<ExpoPushClient>();
-builder.Services.AddHostedService<NudgeWorker>();
-
-//// ---------------------------
-//// 7) Settings Binding
-//// ---------------------------
-//builder.Services.Configure<OpenAISettings>(builder.Configuration.GetSection("OpenAI"));
-//builder.Services.AddSingleton(sp =>
-//{
-//    var config = sp.GetRequiredService<IConfiguration>();
-//    var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY")
-//                 ?? config["OpenAI:ApiKey"];
-
-//    if (string.IsNullOrWhiteSpace(apiKey))
-//        throw new InvalidOperationException("Missing OpenAI API key.");
-
-//    return new OpenAIClient(apiKey);
-//});
-
-//var useOpenAI = builder.Configuration.GetValue<bool>("Planner:UseOpenAI");
-
-//// ---------------------------
-//// 8) OpenAI SDK Client (OC1)
-//// ---------------------------
-//// We register the official OpenAIClient as a singleton.
-//// It uses OpenAISettings.ApiKey (and optional Organization).
-//builder.Services.AddSingleton(sp =>
-//{
-//    var settings = sp.GetRequiredService<IOptions<OpenAISettings>>().Value;
-
-//    if (string.IsNullOrWhiteSpace(settings.ApiKey))
-//    {
-//        if (useOpenAI)
-//            throw new InvalidOperationException("❌ OpenAI:ApiKey is missing in configuration.");
-
-//        // If AI disabled, return a dummy client
-//        // (We avoid null so DI still works, but this client should not be used)
-//        return new OpenAIClient(new ApiKeyCredential("DUMMY_KEY"));
-//    }
-
-//    var opts = new OpenAIClientOptions();
-//    return new OpenAIClient(new ApiKeyCredential(settings.ApiKey!), opts);
-//});
 
 builder.Services.Configure<OpenAISettings>(builder.Configuration.GetSection("OpenAI"));
 

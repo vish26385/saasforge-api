@@ -1,0 +1,360 @@
+﻿using SaaSForge.Api.Data;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Globalization;
+using System.Security.Claims;
+using Task = SaaSForge.Api._LegacyFlowOS.Models.Task;
+using SaaSForge.Api._LegacyFlowOS.DTOs;
+
+namespace SaaSForge.Api._LegacyFlowOS.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    [Authorize]  // Require login
+    public class TasksController : ControllerBase
+    {
+        private readonly AppDbContext _context;
+
+        public TasksController(AppDbContext context)
+        {
+            _context = context;
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> CreateTask([FromBody] TaskCreateDto dto)
+        {
+            //var userId = User.FindFirst("id")?.Value; // from JWT (string)
+
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)
+                         ?? User.FindFirst("id")?.Value;
+
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized();
+
+            if (!HasOffsetInJson(dto.DueDate))
+                return BadRequest(new { message = "DueDate must include timezone offset (Z or +05:30)." });
+
+            // IMPORTANT: dto.DueDate should already come in as UTC from mobile
+            // but we still force UTC Kind to avoid Npgsql issues
+            var dueUtc = dto.DueDate.UtcDateTime;
+
+            // ✅ HARD GUARD: reject truly past tasks
+            if (dueUtc < DateTime.UtcNow.AddMinutes(-2))
+                return BadRequest(new { message = "Due time must be in the future." });
+
+            var task = new Task
+            {
+                Title = dto.Title,
+                Description = dto.Description,
+                DueDate = dueUtc,
+                Priority = dto.Priority,
+                UserId = userId,
+                Completed = false,
+
+                // ✅ USER planned times (forced UTC)
+                PlannedStartUtc = dto.PlannedStartUtc.HasValue
+                ? EnsureUtc(dto.PlannedStartUtc.Value.UtcDateTime)
+                : null,
+
+                PlannedEndUtc = dto.PlannedEndUtc.HasValue
+                ? EnsureUtc(dto.PlannedEndUtc.Value.UtcDateTime)
+                : null,
+
+                NudgeAtUtc = CalcNudgeAtUtc(dueUtc),
+                NudgeSentAtUtc = null,
+                LastNudgeError = null
+            };
+
+            _context.Tasks.Add(task);
+            await _context.SaveChangesAsync();
+
+            return Ok(task);
+        }        
+
+        // ✅ Get all /api/tasks or by due date /api/tasks?due=2025-10-13
+        [HttpGet]
+        public async Task<IActionResult> GetTasks([FromQuery] string? due)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)
+                         ?? User.FindFirst("id")?.Value;
+
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized();
+
+            var query = _context.Tasks
+                .Where(t => t.UserId == userId)
+                .AsQueryable();
+
+            // ✅ IST offset for now (later: per-user timezone)
+            var istOffset = TimeSpan.FromMinutes(330);
+
+            if (!string.IsNullOrWhiteSpace(due))
+            {
+                // ✅ STRICT parse: due must be exactly yyyy-MM-dd (prevents locale / timezone surprises)
+                if (!DateTime.TryParseExact(due, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dueDate))
+                    return BadRequest(new { message = "Invalid due. Use yyyy-MM-dd." });
+
+                // treat as DATE only (IST calendar day)
+                var istDay = dueDate.Date;
+
+                // IST day window -> UTC window
+                var istStartLocal = DateTime.SpecifyKind(istDay, DateTimeKind.Unspecified);
+                var istEndLocal = DateTime.SpecifyKind(istDay.AddDays(1), DateTimeKind.Unspecified);
+
+                var startUtc = new DateTimeOffset(istStartLocal, istOffset).UtcDateTime;
+                var endUtc = new DateTimeOffset(istEndLocal, istOffset).UtcDateTime;
+
+                query = query.Where(t => t.DueDate >= startUtc && t.DueDate < endUtc);
+            }
+
+            var tasks = await query
+                .OrderBy(t => t.DueDate)
+                .ThenByDescending(t => t.Priority)
+                .ToListAsync();
+
+            return Ok(tasks);
+        }
+
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetTask(int id)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)
+                         ?? User.FindFirst("id")?.Value;
+
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized();
+
+            // Find the task that belongs to the current user
+            var task = await _context.Tasks
+                .Where(t => t.UserId == userId && t.Id == id)
+                .FirstOrDefaultAsync();
+
+            if (task == null)
+                return NotFound(new { message = "Task not found or access denied." });
+
+            return Ok(task);
+        }        
+
+        // PUT: api/tasks/{id}
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdateTask(int id, [FromBody] TaskUpdateDto dto)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)
+                         ?? User.FindFirst("id")?.Value;
+
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized();
+
+            if (!HasOffsetInJson(dto.DueDate))
+                return BadRequest(new { message = "DueDate must include timezone offset (Z or +05:30)." });
+
+            var task = await _context.Tasks.FirstOrDefaultAsync(t => t.Id == id && t.UserId == userId);
+            if (task == null) return NotFound();
+
+            var oldDue = task.DueDate;
+            var newDueUtc = dto.DueDate.UtcDateTime;
+
+            task.Title = dto.Title;
+            task.Description = dto.Description;
+            task.DueDate = newDueUtc;
+            task.Priority = dto.Priority;
+            task.Completed = dto.Completed;
+
+            // ✅ Update user-planned times (forced UTC)
+
+            task.PlannedStartUtc = dto.PlannedStartUtc.HasValue
+                ? EnsureUtc(dto.PlannedStartUtc.Value.UtcDateTime)
+                : null;
+
+            task.PlannedEndUtc = dto.PlannedEndUtc.HasValue
+                ? EnsureUtc(dto.PlannedEndUtc.Value.UtcDateTime)
+                : null;
+
+            //task.EstimatedMinutes = dto.EstimatedMinutes.HasValue && dto.EstimatedMinutes.Value > 0
+            //                        ? dto.EstimatedMinutes.Value
+            //                        : (task.EstimatedMinutes ?? 30);
+
+            var dueChanged = oldDue != newDueUtc;
+
+            if (dueChanged)
+            {
+                task.NudgeAtUtc = CalcNudgeAtUtc(newDueUtc);
+                task.NudgeSentAtUtc = null;
+                task.LastNudgeError = null;
+            }
+
+            if (task.Completed)
+            {
+                // stop future nudges
+                task.NudgeAtUtc = null;
+                task.NudgeSentAtUtc = DateTime.UtcNow;
+                task.LastNudgeError = null;
+            }
+            else
+            {
+                // ensure nudge exists
+                task.NudgeAtUtc ??= CalcNudgeAtUtc(task.DueDate);
+            }
+
+            await _context.SaveChangesAsync();
+            return Ok(task);
+        }
+
+        //// DELETE: api/tasks/{id}
+        //[HttpDelete("{id}")]
+        //public async Task<IActionResult> DeleteTask(int id)
+        //{
+        //    var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)
+        //                 ?? User.FindFirst("id")?.Value;
+
+        //    if (string.IsNullOrEmpty(userId))
+        //        return Unauthorized();
+
+        //    var task = await _context.Tasks
+        //        .FirstOrDefaultAsync(t => t.Id == id && t.UserId == userId);
+
+        //    if (task == null)
+        //        return NotFound();
+
+        //    var userOffset = TimeSpan.FromMinutes(330); // IST
+
+        //    // ✅ Convert task UTC dueDate → IST calendar DateOnly
+        //    var istDay = DateOnly.FromDateTime(
+        //        new DateTimeOffset(task.DueDate, TimeSpan.Zero)
+        //            .ToOffset(userOffset)
+        //            .DateTime
+        //    );
+
+        //    await using var tx = await _context.Database.BeginTransactionAsync();
+
+        //    // 1️⃣ Delete task
+        //    _context.Tasks.Remove(task);
+        //    await _context.SaveChangesAsync();
+
+        //    // 2️⃣ Delete DailyPlan by IST DateOnly key
+        //    var plan = await _context.DailyPlans
+        //        .Include(p => p.Items)
+        //        .FirstOrDefaultAsync(p =>
+        //            p.UserId == userId &&
+        //            p.Date == istDay);
+
+        //    if (plan != null)
+        //    {
+        //        _context.DailyPlans.Remove(plan);
+        //        await _context.SaveChangesAsync();
+        //    }
+
+        //    await tx.CommitAsync();
+
+        //    return NoContent();
+        //}
+
+        [HttpDelete("{id:int}")]
+        public async Task<IActionResult> DeleteTask(int id, CancellationToken ct)
+        {
+            var userId =
+                User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? User.FindFirst("id")?.Value;
+
+            if (string.IsNullOrWhiteSpace(userId))
+                return Unauthorized();
+
+            var userOffset = TimeSpan.FromMinutes(330); // IST
+
+            var exec = _context.Database.CreateExecutionStrategy();
+
+            await exec.ExecuteAsync(async () =>
+            {
+                // Keep transaction SHORT
+                await using var tx = await _context.Database.BeginTransactionAsync(ct);
+
+                // ✅ Load only what we need (DueDate) without tracking
+                var taskInfo = await _context.Tasks
+                    .AsNoTracking()
+                    .Where(t => t.Id == id && t.UserId == userId)
+                    .Select(t => new { t.Id, t.DueDate })
+                    .FirstOrDefaultAsync(ct);
+
+                // ✅ Idempotent delete: if already deleted, treat as success
+                if (taskInfo == null)
+                {
+                    await tx.CommitAsync(ct);
+                    return;
+                }
+
+                // ✅ Compute IST plan key
+                var istDay = DateOnly.FromDateTime(
+                    new DateTimeOffset(taskInfo.DueDate, TimeSpan.Zero)
+                        .ToOffset(userOffset)
+                        .DateTime
+                );
+
+                // ✅ 1) Delete task (set-based)
+                await _context.Tasks
+                    .Where(t => t.Id == id && t.UserId == userId)
+                    .ExecuteDeleteAsync(ct);
+
+                // ✅ 2) Find planId only (no Include)
+                var planId = await _context.DailyPlans
+                    .AsNoTracking()
+                    .Where(p => p.UserId == userId && p.Date == istDay)
+                    .Select(p => (int?)p.Id)
+                    .FirstOrDefaultAsync(ct);
+
+                // ✅ 3) Delete plan items + plan (set-based)
+                if (planId.HasValue)
+                {
+                    await _context.DailyPlanItems
+                        .Where(i => i.PlanId == planId.Value)
+                        .ExecuteDeleteAsync(ct);
+
+                    await _context.DailyPlans
+                        .Where(p => p.Id == planId.Value)
+                        .ExecuteDeleteAsync(ct);
+                }
+
+                await tx.CommitAsync(ct);
+            });
+
+            return NoContent();
+        }
+
+        private static DateTime? CalcNudgeAtUtc(DateTime dueUtc, int leadMinutes = 10)
+        {
+            var nowUtc = DateTime.UtcNow;
+
+            var grace = TimeSpan.FromMinutes(2);
+
+            if (dueUtc <= nowUtc)
+            {
+                if (nowUtc - dueUtc <= grace)
+                    return nowUtc.AddSeconds(30);   // soft nudge
+
+                return null; // truly old
+            }
+
+            var target = dueUtc.AddMinutes(-leadMinutes);
+
+            var minAllowed = nowUtc.AddSeconds(30);
+            if (target <= minAllowed)
+                return minAllowed;
+
+            return target;
+        }
+
+        private static bool HasOffsetInJson(DateTimeOffset dtoDueDate)
+        {
+            // DateTimeOffset always has an Offset, but if client sent "no offset",
+            // model binding may assume server local offset, which we don’t want.
+            // So we guard using a stricter approach: require client to send UTC (Offset=0)
+            // OR IST offset (+05:30). Otherwise reject.
+            return dtoDueDate.Offset == TimeSpan.Zero || dtoDueDate.Offset == TimeSpan.FromMinutes(330);
+        }
+
+        private static DateTime EnsureUtc(DateTime dt)
+    => dt.Kind == DateTimeKind.Utc
+        ? dt
+        : DateTime.SpecifyKind(dt.ToUniversalTime(), DateTimeKind.Utc);
+    }
+}

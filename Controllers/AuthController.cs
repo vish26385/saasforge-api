@@ -1,7 +1,6 @@
 ﻿using SaaSForge.Api.Data;
 using SaaSForge.Api.DTOs;
 using SaaSForge.Api.Models;
-using SaaSForge.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.Data;
@@ -11,6 +10,9 @@ using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using SaaSForge.Api.Models.Auth;
+using SaaSForge.Api.Services.Auth;
+using SaaSForge.Api.Services.Common;
 
 namespace SaaSForge.Api.Controllers
 {

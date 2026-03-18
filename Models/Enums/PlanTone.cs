@@ -2,9 +2,9 @@
 {
     public enum PlanTone
     {
-        Soft,
+        Balanced,
         Strict,
-        Playful,
-        Balanced
+        Motivational,
+        Relaxed
     }
 }
