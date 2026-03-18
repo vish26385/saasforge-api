@@ -17,6 +17,7 @@ namespace SaaSForge.Api.Data
         public DbSet<AiConversation> AiConversations { get; set; }
         public DbSet<SubscriptionPlan> SubscriptionPlans { get; set; }
         public DbSet<BusinessUsage> BusinessUsages { get; set; }
+        public DbSet<BusinessSubscription> BusinessSubscriptions { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -160,6 +161,30 @@ namespace SaaSForge.Api.Data
                     CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
                 }
             );
+
+            modelBuilder.Entity<BusinessSubscription>(b =>
+            {
+                b.HasKey(x => x.Id);
+
+                b.Property(x => x.PlanCode)
+                    .IsRequired()
+                    .HasMaxLength(50);
+
+                b.Property(x => x.Status)
+                    .IsRequired()
+                    .HasMaxLength(50);
+
+                b.Property(x => x.StartDateUtc)
+                    .IsRequired();
+
+                b.HasIndex(x => x.BusinessId)
+                    .IsUnique();
+
+                b.HasOne(x => x.Business)
+                    .WithMany()
+                    .HasForeignKey(x => x.BusinessId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
         }
     }
 }

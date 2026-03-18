@@ -13,6 +13,7 @@ using SaaSForge.Api.Services.Ai;
 using SaaSForge.Api.Services.Auth;
 using SaaSForge.Api.Services.Business;
 using SaaSForge.Api.Services.Common;
+using SaaSForge.Api.Services.Subscription;
 using SaaSForge.Api.Services.Usage;
 using System.ClientModel;
 using System.Text;
@@ -131,6 +132,7 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IBusinessService, BusinessService>();
 builder.Services.AddScoped<IAiService, AiService>();
 builder.Services.AddScoped<IUsageService, UsageService>();
+builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
 
 
 // ✅ Bind ExpoPush from appsettings.json using ONE options class (Configurations)
