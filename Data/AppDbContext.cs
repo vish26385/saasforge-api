@@ -14,6 +14,7 @@ namespace SaaSForge.Api.Data
         public DbSet<UserRefreshToken> UserRefreshTokens { get; set; }
         public DbSet<UserDeviceToken> UserDeviceTokens => Set<UserDeviceToken>();
         public DbSet<Business> Businesses { get; set; }
+        public DbSet<AiConversation> AiConversations { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -56,6 +57,39 @@ namespace SaaSForge.Api.Data
                 b.HasOne(x => x.OwnerUser)
                     .WithMany()
                     .HasForeignKey(x => x.OwnerUserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<AiConversation>(b =>
+            {
+                b.HasKey(x => x.Id);
+
+                b.Property(x => x.FeatureType)
+                    .IsRequired()
+                    .HasMaxLength(100);
+
+                b.Property(x => x.Prompt)
+                    .IsRequired()
+                    .HasMaxLength(4000);
+
+                b.Property(x => x.SystemPrompt);
+
+                b.Property(x => x.InputContextJson);
+
+                b.Property(x => x.Response)
+                    .IsRequired();
+
+                b.Property(x => x.Model)
+                    .IsRequired()
+                    .HasMaxLength(100);
+
+                b.HasIndex(x => x.BusinessId);
+
+                b.HasIndex(x => x.CreatedAtUtc);
+
+                b.HasOne(x => x.Business)
+                    .WithMany()
+                    .HasForeignKey(x => x.BusinessId)
                     .OnDelete(DeleteBehavior.Cascade);
             });
         }

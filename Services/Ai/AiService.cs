@@ -1,0 +1,161 @@
+﻿using System.Text;
+using Microsoft.EntityFrameworkCore;
+using OpenAI.Chat;
+using SaaSForge.Api.Data;
+using SaaSForge.Api.DTOs.Ai;
+using SaaSForge.Api.Models;
+
+namespace SaaSForge.Api.Services.Ai
+{
+    public class AiService : IAiService
+    {
+        private readonly AppDbContext _context;
+        private readonly IConfiguration _configuration;
+
+        public AiService(AppDbContext context, IConfiguration configuration)
+        {
+            _context = context;
+            _configuration = configuration;
+        }
+
+        public async Task<AskAiResponseDto> AskAsync(string ownerUserId, AskAiRequestDto dto)
+        {
+            var business = await _context.Businesses
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.OwnerUserId == ownerUserId);
+
+            if (business == null)
+            {
+                throw new InvalidOperationException("Business not found for the current user.");
+            }
+
+            var apiKey = _configuration["OpenAI:ApiKey"];
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                throw new InvalidOperationException("OpenAI API key is not configured.");
+            }
+
+            var model = _configuration["OpenAI:Model"] ?? "gpt-4o-mini";
+
+            var finalSystemPrompt = BuildSystemPrompt(business, dto);
+
+            var client = new ChatClient(model: model, apiKey: apiKey);
+
+            var messages = new List<ChatMessage>
+            {
+                ChatMessage.CreateSystemMessage(finalSystemPrompt),
+                ChatMessage.CreateUserMessage(dto.Prompt)
+            };
+
+            var response = await client.CompleteChatAsync(messages);
+            var aiText = response.Value.Content.FirstOrDefault()?.Text?.Trim();
+
+            if (string.IsNullOrWhiteSpace(aiText))
+            {
+                aiText = "No response generated.";
+            }
+
+            var entity = new AiConversation
+            {
+                BusinessId = business.Id,
+                FeatureType = dto.FeatureType.Trim(),
+                Prompt = dto.Prompt.Trim(),
+                SystemPrompt = dto.SystemPrompt,
+                InputContextJson = dto.InputContextJson,
+                Response = aiText,
+                Model = model,
+                CreatedAtUtc = DateTime.UtcNow
+            };
+
+            _context.AiConversations.Add(entity);
+            await _context.SaveChangesAsync();
+
+            return new AskAiResponseDto
+            {
+                Id = entity.Id,
+                BusinessId = entity.BusinessId,
+                FeatureType = entity.FeatureType,
+                Prompt = entity.Prompt,
+                SystemPrompt = entity.SystemPrompt,
+                InputContextJson = entity.InputContextJson,
+                Response = entity.Response,
+                Model = entity.Model,
+                CreatedAtUtc = entity.CreatedAtUtc
+            };
+        }
+
+        public async Task<List<AiConversationHistoryDto>> GetHistoryAsync(string ownerUserId, int take = 50)
+        {
+            var business = await _context.Businesses
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.OwnerUserId == ownerUserId);
+
+            if (business == null)
+            {
+                throw new InvalidOperationException("Business not found for the current user.");
+            }
+
+            take = Math.Clamp(take, 1, 100);
+
+            return await _context.AiConversations
+                .AsNoTracking()
+                .Where(x => x.BusinessId == business.Id)
+                .OrderByDescending(x => x.CreatedAtUtc)
+                .Take(take)
+                .Select(x => new AiConversationHistoryDto
+                {
+                    Id = x.Id,
+                    FeatureType = x.FeatureType,
+                    Prompt = x.Prompt,
+                    Response = x.Response,
+                    Model = x.Model,
+                    CreatedAtUtc = x.CreatedAtUtc
+                })
+                .ToListAsync();
+        }
+
+        private static string BuildSystemPrompt(SaaSForge.Api.Models.Business business, AskAiRequestDto dto)
+        {
+            var sb = new StringBuilder();
+
+            sb.AppendLine("You are an AI assistant working for a business.");
+            sb.AppendLine("Give clear, helpful, and concise answers.");
+            sb.AppendLine("Do not invent facts when context is missing.");
+            sb.AppendLine();
+
+            sb.AppendLine($"Business Name: {business.Name}");
+            sb.AppendLine($"Business Slug: {business.Slug}");
+
+            if (!string.IsNullOrWhiteSpace(business.Email))
+                sb.AppendLine($"Business Email: {business.Email}");
+
+            if (!string.IsNullOrWhiteSpace(business.Phone))
+                sb.AppendLine($"Business Phone: {business.Phone}");
+
+            if (!string.IsNullOrWhiteSpace(business.Address))
+                sb.AppendLine($"Business Address: {business.Address}");
+
+            if (!string.IsNullOrWhiteSpace(business.TimeZone))
+                sb.AppendLine($"Business Time Zone: {business.TimeZone}");
+
+            sb.AppendLine();
+            sb.AppendLine($"Feature Type: {dto.FeatureType}");
+
+            if (!string.IsNullOrWhiteSpace(dto.SystemPrompt))
+            {
+                sb.AppendLine();
+                sb.AppendLine("Additional Instructions:");
+                sb.AppendLine(dto.SystemPrompt.Trim());
+            }
+
+            if (!string.IsNullOrWhiteSpace(dto.InputContextJson))
+            {
+                sb.AppendLine();
+                sb.AppendLine("Structured Input Context:");
+                sb.AppendLine(dto.InputContextJson.Trim());
+            }
+
+            return sb.ToString();
+        }
+    }
+}

@@ -9,6 +9,7 @@ using OpenAI; // ✅ Official SDK
 using SaaSForge.Api.Configurations;
 using SaaSForge.Api.Data;
 using SaaSForge.Api.Models.Auth;
+using SaaSForge.Api.Services.Ai;
 using SaaSForge.Api.Services.Auth;
 using SaaSForge.Api.Services.Business;
 using SaaSForge.Api.Services.Common;
@@ -127,6 +128,7 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IBusinessService, BusinessService>();
+builder.Services.AddScoped<IAiService, AiService>();
 
 
 // ✅ Bind ExpoPush from appsettings.json using ONE options class (Configurations)
