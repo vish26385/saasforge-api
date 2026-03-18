@@ -1,66 +1,84 @@
-# FlowOS Backend
+# SaaSForge.Api
 
-⚙️ **FlowOS Backend** is the API service powering FlowOS Mobile.  
-It is built with **ASP.NET Core 8 (C#)** and provides secure REST APIs for the FlowOS ecosystem.  
+🚀 **SaaSForge.Api** is a reusable ASP.NET Core Web API backend designed to rapidly build **SaaS products and AI-powered automation systems**.
+
+It serves as a **base template** for creating scalable, production-ready backend systems with authentication, database integration, and AI capabilities.
 
 ---
 
 ## 🌍 Vision
-FlowOS Backend is the **foundation** that enables AI-powered planning, nudges, and habit tracking.  
-It ensures that user data, tasks, and plans are stored, processed, and delivered reliably.  
 
-The backend is designed to be **scalable, secure, and extensible** — supporting both the MVP and future integrations.
+SaaSForge.Api is built to help developers and founders:
+
+- ⚡ Launch SaaS products faster
+- 🤖 Integrate AI into applications easily
+- 🧩 Reuse a proven backend architecture
+- 📈 Scale from MVP to production
+
+This project acts as a **foundation for multiple future SaaS and AI automation projects**.
 
 ---
 
-## ✨ Core Features (MVP)
-- 🛠️ **Task Management API** → Create, read, update, delete tasks.  
-- 🔐 **Authentication & Authorization** → ASP.NET Identity + JWT.  
-- 🧠 **AI Integration Support** → Connects to OpenAI API for plan generation.  
-- 📊 **Persistence Layer** → SQL Server / SQLite for storing user data.  
+## ✨ Core Features
+
+- 🔐 **Authentication & Authorization**
+  - ASP.NET Identity
+  - JWT-based authentication
+  - Refresh token support
+
+- 📦 **Modular Architecture**
+  - Clean separation: Controllers, Services, DTOs, Models
+  - Easily extendable for new modules
+
+- 🧠 **AI Integration Ready**
+  - OpenAI SDK integration
+  - Plug-and-play AI service layer
+
+- 🗄️ **Database Support**
+  - PostgreSQL (via Entity Framework Core)
+  - Migration-ready structure
+
+- 📡 **REST API**
+  - Clean API endpoints
+  - Swagger UI for testing
+
+- 🔔 **Notification System (Base)**
+  - Push notification structure (Expo-ready)
+
+- 🐳 **Docker Ready**
+  - Includes Dockerfile for deployment
 
 ---
 
 ## 🛠️ Tech Stack
+
 - **Framework:** ASP.NET Core 8 Web API  
 - **Language:** C#  
-- **Database:** SQL Server (primary) / SQLite (lightweight start)  
-- **ORM:** Entity Framework Core + Stored Procedures  
-- **Auth & Security:** ASP.NET Identity + JWT  
-- **Infra:** Docker + (later) AWS/GCP/Azure  
+- **Database:** PostgreSQL  
+- **ORM:** Entity Framework Core  
+- **Authentication:** ASP.NET Identity + JWT  
+- **AI Integration:** OpenAI SDK  
+- **API Docs:** Swagger (OpenAPI)  
+- **Deployment:** Docker / Cloud-ready  
 
 ---
 
-## 📅 Roadmap (Backend MVP - First 6 Weeks)
-- **Week 1:** Project setup (ASP.NET Core API, repo initialized).  
-- **Week 2:** Implement Task CRUD APIs.  
-- **Week 3:** Add User Authentication & JWT.  
-- **Week 4:** Integrate AI endpoints (connect with OpenAI).  
-- **Week 5:** Add persistence + migrations.  
-- **Week 6:** Beta test with mobile app integration.  
+## 📁 Project Structure
 
----
-
-## 🤝 Contributing
-This backend is under **early development**.  
-If you’d like to collaborate, open an **issue** or a **pull request**.  
-
----
-
-## 📌 Status
-🚧 **MVP in progress** → Core project structure set up.  
-APIs coming soon.  
-
----
-
-## 🔮 Future Potential
-- Multi-device sync.  
-- Analytics & reports.  
-- Role-based access control.  
-- Third-party integrations (calendar, health apps).  
-
----
-
-## 📧 Contact
-Maintainer: Vishnu Pandit  
-Project Codename: **FlowOS Backend**
+```text
+SaaSForge.Api/
+│
+├── Controllers/
+├── Services/
+├── DTOs/
+├── Models/
+├── Data/
+├── Migrations/
+├── Configurations/
+├── Helpers/
+├── Properties/
+│
+├── Program.cs
+├── appsettings.json
+├── Dockerfile
+└── SaaSForge.Api.csproj
