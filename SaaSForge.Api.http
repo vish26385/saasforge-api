@@ -1,0 +1,6 @@
+@SaaSForge.Api_HostAddress = http://localhost:5056
+
+GET {{SaaSForge.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
