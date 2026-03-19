@@ -124,7 +124,9 @@ namespace SaaSForge.Api.Services.Subscription
                 PlanCode = subscription.PlanCode,
                 Status = subscription.Status,
                 StartDateUtc = subscription.StartDateUtc,
-                EndDateUtc = subscription.EndDateUtc
+                EndDateUtc = subscription.EndDateUtc,
+                CreatedAtUtc = subscription.CreatedAtUtc,
+                UpdatedAtUtc = subscription.UpdatedAtUtc
             };
         }
     }

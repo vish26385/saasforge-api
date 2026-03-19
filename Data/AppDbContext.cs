@@ -61,6 +61,14 @@ namespace SaaSForge.Api.Data
                     .WithMany()
                     .HasForeignKey(x => x.OwnerUserId)
                     .OnDelete(DeleteBehavior.Cascade);
+
+                b.Property(x => x.CreatedAtUtc)
+                    .IsRequired()
+                    .HasColumnType("timestamp with time zone");
+
+                b.Property(x => x.UpdatedAtUtc)
+                    .IsRequired()
+                    .HasColumnType("timestamp with time zone");
             });
 
             modelBuilder.Entity<AiConversation>(b =>
@@ -94,6 +102,10 @@ namespace SaaSForge.Api.Data
                     .WithMany()
                     .HasForeignKey(x => x.BusinessId)
                     .OnDelete(DeleteBehavior.Cascade);
+
+                b.Property(x => x.CreatedAtUtc)
+                    .IsRequired()
+                    .HasColumnType("timestamp with time zone");
             });
 
             modelBuilder.Entity<SubscriptionPlan>(b =>
@@ -116,6 +128,10 @@ namespace SaaSForge.Api.Data
 
                 b.HasIndex(x => x.Code)
                     .IsUnique();
+
+                b.Property(x => x.CreatedAtUtc)
+                    .IsRequired()
+                    .HasColumnType("timestamp with time zone");
             });
 
             modelBuilder.Entity<BusinessUsage>(b =>
@@ -139,6 +155,14 @@ namespace SaaSForge.Api.Data
                     .WithMany()
                     .HasForeignKey(x => x.BusinessId)
                     .OnDelete(DeleteBehavior.Cascade);
+
+                b.Property(x => x.CurrentPeriodStartUtc)
+                    .IsRequired()
+                    .HasColumnType("timestamp with time zone");
+
+                b.Property(x => x.LastUpdatedAtUtc)
+                    .IsRequired()
+                    .HasColumnType("timestamp with time zone");
             });
 
             modelBuilder.Entity<SubscriptionPlan>().HasData(
@@ -184,6 +208,21 @@ namespace SaaSForge.Api.Data
                     .WithMany()
                     .HasForeignKey(x => x.BusinessId)
                     .OnDelete(DeleteBehavior.Cascade);
+
+                b.Property(x => x.StartDateUtc)
+                    .IsRequired()
+                    .HasColumnType("timestamp with time zone");
+
+                b.Property(x => x.EndDateUtc)
+                    .HasColumnType("timestamp with time zone");
+
+                b.Property(x => x.CreatedAtUtc)
+                    .IsRequired()
+                    .HasColumnType("timestamp with time zone");
+
+                b.Property(x => x.UpdatedAtUtc)
+                    .IsRequired()
+                    .HasColumnType("timestamp with time zone");
             });
         }
     }
