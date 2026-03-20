@@ -8,6 +8,7 @@ using Microsoft.OpenApi.Models;
 using OpenAI; // ✅ Official SDK
 using SaaSForge.Api.Configurations;
 using SaaSForge.Api.Data;
+using SaaSForge.Api.Models;
 using SaaSForge.Api.Models.Auth;
 using SaaSForge.Api.Services.Ai;
 using SaaSForge.Api.Services.Auth;
@@ -222,6 +223,38 @@ static async System.Threading.Tasks.Task SeedRolesAndAdminUserAsync(WebApplicati
     return; // 👈 Fix CS0161
 }
 
+static void SeedSubscriptionPlans(WebApplication app)
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+    if (!db.SubscriptionPlans.Any(x => x.Code == "free"))
+    {
+        db.SubscriptionPlans.Add(new SubscriptionPlan
+        {
+            Code = "free",
+            Name = "Free",
+            MonthlyAiRequestLimit = 50,
+            IsActive = true,
+            CreatedAtUtc = DateTime.UtcNow
+        });
+    }
+
+    if (!db.SubscriptionPlans.Any(x => x.Code == "pro"))
+    {
+        db.SubscriptionPlans.Add(new SubscriptionPlan
+        {
+            Code = "pro",
+            Name = "Pro",
+            MonthlyAiRequestLimit = 1000,
+            IsActive = true,
+            CreatedAtUtc = DateTime.UtcNow
+        });
+    }
+
+    db.SaveChanges();
+}
+
 // Trust X-Forwarded-* (Azure/AppGW/NGINX)
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
@@ -250,6 +283,7 @@ app.MapGet("/", () => Results.Ok("✅ SaaSForge API running"));
 
 // ⬇️ ADD THIS BEFORE app.Run()
 await SeedRolesAndAdminUserAsync(app);
+SeedSubscriptionPlans(app);
 
 // ---------------------------
 // 10) Run

@@ -164,28 +164,7 @@ namespace SaaSForge.Api.Data
                     .IsRequired()
                     .HasColumnType("timestamp with time zone");
             });
-
-            modelBuilder.Entity<SubscriptionPlan>().HasData(
-                new SubscriptionPlan
-                {
-                    Id = 1,
-                    Code = "free",
-                    Name = "Free",
-                    MonthlyAiRequestLimit = 50,
-                    IsActive = true,
-                    CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-                },
-                new SubscriptionPlan
-                {
-                    Id = 2,
-                    Code = "pro",
-                    Name = "Pro",
-                    MonthlyAiRequestLimit = 1000,
-                    IsActive = true,
-                    CreatedAtUtc = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-                }
-            );
-
+            
             modelBuilder.Entity<BusinessSubscription>(b =>
             {
                 b.HasKey(x => x.Id);
