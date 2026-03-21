@@ -70,7 +70,27 @@ namespace SaaSForge.Api.Controllers
             }
 
             if (!result.Succeeded)
-                return BadRequest(result.Errors);
+            {
+                var duplicateEmailError = result.Errors.FirstOrDefault(x =>
+                    x.Code == "DuplicateUserName" ||
+                    x.Description.Contains("already taken"));
+
+                if (duplicateEmailError != null)
+                {
+                    return Conflict(new
+                    {
+                        message = "An account with this email already exists"
+                    });
+                }
+
+                var firstError = result.Errors.FirstOrDefault()?.Description
+                                 ?? "Something went wrong. Please try again.";
+
+                return BadRequest(new
+                {
+                    message = firstError
+                });
+            }
 
             // 🧩 Generate JWT + Refresh Token for the newly registered user
             var token = await _tokenService.GenerateJwtTokenAsync(user);

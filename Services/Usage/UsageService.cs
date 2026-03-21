@@ -2,16 +2,19 @@
 using SaaSForge.Api.Data;
 using SaaSForge.Api.DTOs.Usage;
 using SaaSForge.Api.Models;
+using SaaSForge.Api.Services.Subscription;
 
 namespace SaaSForge.Api.Services.Usage
 {
     public class UsageService : IUsageService
     {
         private readonly AppDbContext _context;
+        private readonly ISubscriptionService _subscriptionService;
 
-        public UsageService(AppDbContext context)
+        public UsageService(AppDbContext context, ISubscriptionService subscriptionService)
         {
             _context = context;
+            _subscriptionService = subscriptionService;
         }
 
         public async Task<BusinessUsageResponseDto> GetMyUsageAsync(string ownerUserId)
@@ -33,12 +36,29 @@ namespace SaaSForge.Api.Services.Usage
 
         public async Task EnsureCanUseAiAsync(int businessId)
         {
+            await EnsureSubscriptionIsActiveAsync(businessId);
+
             var usage = await GetOrCreateUsageAsync(businessId);
             usage = await EnsurePeriodIsCurrentAsync(usage);
 
             if (usage.AiRequestsUsed >= usage.AiRequestLimit)
             {
                 throw new InvalidOperationException("AI request limit reached for the current billing period.");
+            }
+        }
+
+        private async Task EnsureSubscriptionIsActiveAsync(int businessId)
+        {
+            var subscription = await _subscriptionService.GetOrCreateSubscriptionAsync(businessId);
+
+            if (!string.Equals(subscription.Status, "active", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Subscription is not active.");
+            }
+
+            if (subscription.EndDateUtc.HasValue && subscription.EndDateUtc.Value <= DateTime.UtcNow)
+            {
+                throw new InvalidOperationException("Subscription has expired.");
             }
         }
 
@@ -72,14 +92,18 @@ namespace SaaSForge.Api.Services.Usage
                 throw new InvalidOperationException("Default free plan is not configured.");
             }
 
+            var subscription = await _subscriptionService.GetOrCreateSubscriptionAsync(businessId);
+            var nowUtc = DateTime.UtcNow;
+            var currentPeriodStartUtc = GetCurrentPeriodStartUtc(subscription.StartDateUtc, nowUtc);
+
             usage = new BusinessUsage
             {
                 BusinessId = businessId,
                 PlanCode = freePlan.Code,
-                CurrentPeriodStartUtc = GetCurrentPeriodStartUtc(),
+                CurrentPeriodStartUtc = currentPeriodStartUtc,
                 AiRequestsUsed = 0,
                 AiRequestLimit = freePlan.MonthlyAiRequestLimit,
-                LastUpdatedAtUtc = DateTime.UtcNow
+                LastUpdatedAtUtc = nowUtc
             };
 
             _context.BusinessUsages.Add(usage);
@@ -90,9 +114,11 @@ namespace SaaSForge.Api.Services.Usage
 
         private async Task<BusinessUsage> EnsurePeriodIsCurrentAsync(BusinessUsage usage)
         {
-            var currentPeriodStart = GetCurrentPeriodStartUtc();
+            var subscription = await _subscriptionService.GetOrCreateSubscriptionAsync(usage.BusinessId);
+            var nowUtc = DateTime.UtcNow;
+            var expectedPeriodStartUtc = GetCurrentPeriodStartUtc(subscription.StartDateUtc, nowUtc);
 
-            if (usage.CurrentPeriodStartUtc >= currentPeriodStart)
+            if (usage.CurrentPeriodStartUtc == expectedPeriodStartUtc)
             {
                 return usage;
             }
@@ -106,20 +132,59 @@ namespace SaaSForge.Api.Services.Usage
                 throw new InvalidOperationException($"Active plan '{usage.PlanCode}' not found.");
             }
 
-            usage.CurrentPeriodStartUtc = currentPeriodStart;
-            usage.AiRequestsUsed = 0;
+            usage.CurrentPeriodStartUtc = expectedPeriodStartUtc;
+            //usage.AiRequestsUsed = 0;
             usage.AiRequestLimit = plan.MonthlyAiRequestLimit;
-            usage.LastUpdatedAtUtc = DateTime.UtcNow;
+            usage.LastUpdatedAtUtc = nowUtc;
 
             await _context.SaveChangesAsync();
 
             return usage;
         }
 
-        private static DateTime GetCurrentPeriodStartUtc()
+        private static DateTime GetCurrentPeriodStartUtc(DateTime subscriptionStartUtc, DateTime nowUtc)
         {
-            var now = DateTime.UtcNow;
-            return new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+            var anchorDay = subscriptionStartUtc.Day;
+
+            var candidateDay = Math.Min(anchorDay, DateTime.DaysInMonth(nowUtc.Year, nowUtc.Month));
+            var candidateStart = new DateTime(
+                nowUtc.Year,
+                nowUtc.Month,
+                candidateDay,
+                subscriptionStartUtc.Hour,
+                subscriptionStartUtc.Minute,
+                subscriptionStartUtc.Second,
+                DateTimeKind.Utc);
+
+            if (nowUtc >= candidateStart)
+            {
+                return candidateStart;
+            }
+
+            var previousMonth = nowUtc.AddMonths(-1);
+            var previousDay = Math.Min(anchorDay, DateTime.DaysInMonth(previousMonth.Year, previousMonth.Month));
+
+            return new DateTime(
+                previousMonth.Year,
+                previousMonth.Month,
+                previousDay,
+                subscriptionStartUtc.Hour,
+                subscriptionStartUtc.Minute,
+                subscriptionStartUtc.Second,
+                DateTimeKind.Utc);
+        }
+
+        private static DateTime GetNextPeriodStartUtc(DateTime currentPeriodStartUtc)
+        {
+            var nextMonth = currentPeriodStartUtc.AddMonths(1);
+            return new DateTime(
+                nextMonth.Year,
+                nextMonth.Month,
+                Math.Min(currentPeriodStartUtc.Day, DateTime.DaysInMonth(nextMonth.Year, nextMonth.Month)),
+                currentPeriodStartUtc.Hour,
+                currentPeriodStartUtc.Minute,
+                currentPeriodStartUtc.Second,
+                DateTimeKind.Utc);
         }
 
         private static BusinessUsageResponseDto MapToDto(BusinessUsage usage)

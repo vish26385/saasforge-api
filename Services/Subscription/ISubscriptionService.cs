@@ -7,6 +7,6 @@ namespace SaaSForge.Api.Services.Subscription
     {
         Task<SubscriptionResponseDto> GetMySubscriptionAsync(string ownerUserId);
         Task<BusinessSubscription> GetOrCreateSubscriptionAsync(int businessId);
-        Task<SubscriptionResponseDto> ChangePlanAsync(string ownerUserId, string planCode);
+        Task<ChangePlanResultDto> ChangePlanAsync(string ownerUserId, string planCode);
     }
 }

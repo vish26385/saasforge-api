@@ -65,14 +65,14 @@ namespace SaaSForge.Api.Services.Subscription
             return subscription;
         }
 
-        public async Task<SubscriptionResponseDto> ChangePlanAsync(string ownerUserId, string planCode)
+        public async Task<ChangePlanResultDto> ChangePlanAsync(string ownerUserId, string planCode)
         {
             if (string.IsNullOrWhiteSpace(planCode))
             {
                 throw new InvalidOperationException("Plan code is required.");
             }
 
-            var normalizedPlanCode = planCode.Trim().ToLower();
+            var normalizedPlanCode = planCode.Trim().ToLowerInvariant();
 
             var business = await _context.Businesses
                 .AsNoTracking()
@@ -93,13 +93,44 @@ namespace SaaSForge.Api.Services.Subscription
             }
 
             var subscription = await GetOrCreateSubscriptionAsync(business.Id);
+            var currentPlanCode = (subscription.PlanCode ?? string.Empty).Trim().ToLowerInvariant();
+
+            // Idempotent no-op
+            if (string.Equals(currentPlanCode, normalizedPlanCode, StringComparison.OrdinalIgnoreCase))
+            {
+                var message = normalizedPlanCode == "pro"
+                    ? "You are already on the Pro plan"
+                    : $"You are already on the {plan.Name} plan";
+
+                return new ChangePlanResultDto
+                {
+                    Changed = false,
+                    Message = message,
+                    Subscription = MapToDto(subscription)
+                };
+            }
+
+            var nowUtc = DateTime.UtcNow;
+
+            await using var transaction = await _context.Database.BeginTransactionAsync();
 
             subscription.PlanCode = plan.Code;
             subscription.Status = "active";
-            subscription.EndDateUtc = null;
-            subscription.UpdatedAtUtc = DateTime.UtcNow;
 
-            await _context.SaveChangesAsync();
+            // Only set subscription dates when there is an actual billing-cycle reason.
+            // free -> pro is a real paid upgrade event, so dates are set once here.
+            if (string.Equals(currentPlanCode, "free", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(normalizedPlanCode, "pro", StringComparison.OrdinalIgnoreCase))
+            {
+                subscription.StartDateUtc = nowUtc;
+                subscription.EndDateUtc = nowUtc.AddMonths(1);
+            }
+            else if (string.Equals(normalizedPlanCode, "free", StringComparison.OrdinalIgnoreCase))
+            {
+                subscription.EndDateUtc = null;
+            }
+
+            subscription.UpdatedAtUtc = nowUtc;
 
             var usage = await _context.BusinessUsages
                 .FirstOrDefaultAsync(x => x.BusinessId == business.Id);
@@ -107,13 +138,32 @@ namespace SaaSForge.Api.Services.Subscription
             if (usage != null)
             {
                 usage.PlanCode = plan.Code;
-                usage.AiRequestLimit = plan.MonthlyAiRequestLimit;
-                usage.LastUpdatedAtUtc = DateTime.UtcNow;
 
-                await _context.SaveChangesAsync();
+                // Preserve AiRequestsUsed — do NOT reset to 0
+                usage.AiRequestLimit = plan.MonthlyAiRequestLimit;
+
+                // If this is the actual free -> pro upgrade, align usage cycle to the new paid cycle
+                // but keep the already used count.
+                if (string.Equals(currentPlanCode, "free", StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(normalizedPlanCode, "pro", StringComparison.OrdinalIgnoreCase))
+                {
+                    usage.CurrentPeriodStartUtc = subscription.StartDateUtc;
+                }
+
+                usage.LastUpdatedAtUtc = nowUtc;
             }
 
-            return MapToDto(subscription);
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return new ChangePlanResultDto
+            {
+                Changed = true,
+                Message = string.Equals(normalizedPlanCode, "pro", StringComparison.OrdinalIgnoreCase)
+                    ? "Plan upgraded to Pro successfully."
+                    : $"Plan changed to {plan.Name} successfully.",
+                Subscription = MapToDto(subscription)
+            };
         }
 
         private static SubscriptionResponseDto MapToDto(BusinessSubscription subscription)
