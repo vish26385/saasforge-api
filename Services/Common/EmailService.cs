@@ -20,6 +20,8 @@ namespace SaaSForge.Api.Services.Common
 
         public async Task SendEmailAsync(string to, string subject, string body)
         {
+            try
+            {           
             var smtpSection = _config.GetSection("SmtpSettings");
 
             using var client = new SmtpClient(smtpSection["Host"], int.Parse(smtpSection["Port"]))
@@ -38,6 +40,11 @@ namespace SaaSForge.Api.Services.Common
             mail.To.Add(to);
 
             await client.SendMailAsync(mail);
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
         }
     }
 }

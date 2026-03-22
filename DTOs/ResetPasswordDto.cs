@@ -1,9 +1,22 @@
-﻿namespace SaaSForge.Api.DTOs
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace SaaSForge.Api.DTOs
 {
     public class ResetPasswordDto
     {
-        public string Email { get; set; }
-        public string Token { get; set; }
-        public string NewPassword { get; set; }
+        [Required]
+        [EmailAddress]
+        public string Email { get; set; } = string.Empty;
+
+        [Required]
+        public string Token { get; set; } = string.Empty;
+
+        [Required]
+        [MinLength(6)]
+        public string NewPassword { get; set; } = string.Empty;
+
+        [Required]
+        [Compare(nameof(NewPassword))]
+        public string ConfirmPassword { get; set; } = string.Empty;
     }
 }

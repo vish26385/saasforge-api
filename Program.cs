@@ -142,6 +142,11 @@ builder.Services.Configure<ExpoPushOptions>(
 );
 
 builder.Services.Configure<OpenAISettings>(builder.Configuration.GetSection("OpenAI"));
+builder.Services.Configure<ClientAppSettings>(
+    builder.Configuration.GetSection("ClientApp"));
+
+builder.Services.Configure<PasswordResetSettings>(
+    builder.Configuration.GetSection("PasswordReset"));
 
 builder.Services.AddSingleton(sp =>
 {

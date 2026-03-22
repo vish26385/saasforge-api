@@ -1,7 +1,11 @@
-﻿namespace SaaSForge.Api.DTOs
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace SaaSForge.Api.DTOs
 {
     public class ForgotPasswordDto
     {
-        public string Email { get; set; }
+        [Required]
+        [EmailAddress]
+        public string Email { get; set; } = string.Empty;
     }
 }

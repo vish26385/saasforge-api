@@ -27,13 +27,15 @@ namespace SaaSForge.Api.Controllers
         private readonly TokenService _tokenService;
         private readonly AppDbContext _context;
         private readonly IEmailService _emailService;
+        private readonly IWebHostEnvironment _env;
 
         public AuthController(UserManager<ApplicationUser> userManager,
                               RoleManager<IdentityRole> roleManager,
                               IConfiguration config, 
                               TokenService tokenService, 
                               AppDbContext context,
-                              IEmailService emailService
+                              IEmailService emailService,
+                              IWebHostEnvironment env
                               )
         {
             _userManager = userManager;
@@ -42,6 +44,7 @@ namespace SaaSForge.Api.Controllers
             _tokenService = tokenService;
             _context = context;
             _emailService = emailService;
+            _env = env;
         }
 
         [HttpPost("register")]
@@ -190,50 +193,134 @@ namespace SaaSForge.Api.Controllers
         }
 
         [AllowAnonymous]
-        [HttpPost("forgot-password")]        
+        [HttpPost("forgot-password")]
         public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto)
         {
-            var user = await _userManager.FindByEmailAsync(dto.Email);
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            var genericMessage = "If an account exists for this email, a password reset link has been sent.";
+
+            var email = dto.Email.Trim();
+            var user = await _userManager.FindByEmailAsync(email);
+
             if (user == null)
-                return Ok(new { message = "If the email exists, a reset link has been sent." });
+            {
+                return Ok(new
+                {
+                    message = genericMessage
+                });
+            }
 
             var token = await _userManager.GeneratePasswordResetTokenAsync(user);
 
-            // Build reset link
-            var resetLink = $"{_config["ClientBaseUrl"]}/reset?email={dto.Email}&token={Uri.EscapeDataString(token)}";
+            var frontendBaseUrl = _config["ClientApp:BaseUrl"];
+            if (string.IsNullOrWhiteSpace(frontendBaseUrl))
+            {
+                return StatusCode(500, new
+                {
+                    message = "Client application base URL is not configured."
+                });
+            }
 
-            var subject = "FlowOS Password Reset";
+            var resetLink =
+                $"{frontendBaseUrl.TrimEnd('/')}/reset-password" +
+                $"?email={Uri.EscapeDataString(email)}" +
+                $"&token={Uri.EscapeDataString(token)}";
+
+            var subject = "Reset your password";
             var body = $@"
-                        <h2>Reset your FlowOS password</h2>
-                        <p>Click the link below to reset your password:</p>
-                        <a href='{resetLink}'>{resetLink}</a>
-                        <br/><br/>
-                        <p>If you didn’t request this, please ignore this email.</p>";
+                        <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #111827;'>
+                            <h2 style='margin-bottom: 16px;'>Reset your password</h2>
+                            <p>We received a request to reset your password.</p>
+                            <p>Click the button below to set a new password:</p>
+                            <p style='margin: 24px 0;'>
+                                <a href='{resetLink}'
+                                   style='background-color:#2563eb;color:white;padding:12px 20px;text-decoration:none;border-radius:8px;display:inline-block;'>
+                                   Reset Password
+                                </a>
+                            </p>
+                            <p>If the button does not work, copy and paste this link into your browser:</p>
+                            <p><a href='{resetLink}'>{resetLink}</a></p>
+                            <p>If you did not request this, you can safely ignore this email.</p>
+                        </div>";
 
-            await _emailService.SendEmailAsync(dto.Email, subject, body);
+            await _emailService.SendEmailAsync(email, subject, body);
 
-            return Ok(new { message = "Password reset link sent if email exists." });
+            var returnTokenInDevelopment =
+                bool.TryParse(_config["PasswordReset:ReturnTokenInDevelopment"], out var flag) && flag;
+
+            if (_env.IsDevelopment() && returnTokenInDevelopment)
+            {
+                return Ok(new
+                {
+                    message = genericMessage,
+                    resetToken = token,
+                    resetLink = resetLink
+                });
+            }
+
+            return Ok(new
+            {
+                message = genericMessage
+            });
         }
 
-        [HttpPost("reset-password")]
         [AllowAnonymous]
+        [HttpPost("reset-password")]
         public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
         {
-            var user = await _userManager.FindByEmailAsync(dto.Email);
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            if (!string.Equals(dto.NewPassword, dto.ConfirmPassword, StringComparison.Ordinal))
+            {
+                return BadRequest(new
+                {
+                    message = "New password and confirm password do not match."
+                });
+            }
+
+            var email = dto.Email.Trim();
+            var user = await _userManager.FindByEmailAsync(email);
+
             if (user == null)
-                return BadRequest(new { message = "Invalid email" });
+            {
+                return BadRequest(new
+                {
+                    message = "Invalid reset request."
+                });
+            }
 
             var result = await _userManager.ResetPasswordAsync(user, dto.Token, dto.NewPassword);
 
             if (!result.Succeeded)
-                return BadRequest(result.Errors);
+            {
+                return BadRequest(new
+                {
+                    message = "Password reset failed.",
+                    errors = result.Errors.Select(e => e.Description).ToList()
+                });
+            }
 
-            // Optional: revoke refresh tokens if you want to invalidate old sessions
-            var tokens = _context.UserRefreshTokens.Where(t => t.UserId == user.Id && t.RevokedAt == null);
-            foreach (var t in tokens) t.RevokedAt = DateTime.UtcNow;
+            var tokens = _context.UserRefreshTokens
+                .Where(t => t.UserId == user.Id && t.RevokedAt == null);
+
+            foreach (var t in tokens)
+            {
+                t.RevokedAt = DateTime.UtcNow;
+            }
+
             await _context.SaveChangesAsync();
 
-            return Ok(new { message = "Password reset successful." });
+            return Ok(new
+            {
+                message = "Password has been reset successfully."
+            });
         }
 
         // ✅ GET /auth/me
