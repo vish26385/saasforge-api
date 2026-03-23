@@ -55,22 +55,12 @@ namespace SaaSForge.Api.Controllers
             {
                 UserName = dto.Email,
                 Email = dto.Email,
-                FullName = dto.FullName
+                FullName = dto.FullName,
+                EmailConfirmed = false // IMPORTANT
             };
 
-            // ✅ Save user to the Identity store
+            // ✅ Save user
             var result = await _userManager.CreateAsync(user, dto.Password);
-
-            if (result.Succeeded)
-            {
-                if (!await _roleManager.RoleExistsAsync("User"))
-                {
-                    await _roleManager.CreateAsync(new IdentityRole("User"));
-                }
-
-                // Assign normal user role
-                await _userManager.AddToRoleAsync(user, "User");
-            }
 
             if (!result.Succeeded)
             {
@@ -95,31 +85,101 @@ namespace SaaSForge.Api.Controllers
                 });
             }
 
-            // 🧩 Generate JWT + Refresh Token for the newly registered user
+            // ✅ Ensure role exists
+            if (!await _roleManager.RoleExistsAsync("User"))
+            {
+                await _roleManager.CreateAsync(new IdentityRole("User"));
+            }
+
+            // Assign role
+            await _userManager.AddToRoleAsync(user, "User");
+
+            // ================================
+            // 🔥 EMAIL VERIFICATION (NEW)
+            // ================================
+            var emailToken = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+
+            var frontendBaseUrl = _config["ClientApp:BaseUrl"];
+
+            var verificationLink =
+                $"{frontendBaseUrl.TrimEnd('/')}/verify-email" +
+                $"?email={Uri.EscapeDataString(user.Email!)}" +
+                $"&token={Uri.EscapeDataString(emailToken)}";
+
+            var subject = "Verify your email - SaaSForge";
+            var body = $@"
+        <h2>Welcome to SaaSForge</h2>
+        <p>Please verify your email by clicking below:</p>
+        <a href='{verificationLink}'>Verify Email</a>
+        <br/><br/>
+        <p>If you didn't create this account, ignore this email.</p>";
+
+            await _emailService.SendEmailAsync(user.Email!, subject, body);
+
+            // ================================
+            // 🔐 JWT + REFRESH TOKEN (UNCHANGED)
+            // ================================
             var token = await _tokenService.GenerateJwtTokenAsync(user);
             var refreshToken = await _tokenService.GenerateRefreshTokenAsync();
 
-            // Save refresh token to DB
             var userRefresh = new UserRefreshToken
             {
                 UserId = user.Id,
                 Token = refreshToken,
-                ExpiresAt = DateTime.UtcNow.AddDays(7), // valid for 7 days
+                ExpiresAt = DateTime.UtcNow.AddDays(7),
                 CreatedAt = DateTime.UtcNow
             };
 
             _context.UserRefreshTokens.Add(userRefresh);
             await _context.SaveChangesAsync();
 
-            return Ok(new { token, refreshToken });
+            // ================================
+            // 🧪 DEV SUPPORT (OPTIONAL)
+            // ================================
+            var returnTokenInDev =
+                bool.TryParse(_config["EmailConfirmation:ReturnTokenInDevelopment"], out var flag) && flag;
+
+            if (_env.IsDevelopment() && returnTokenInDev)
+            {
+                return Ok(new
+                {
+                    token,
+                    refreshToken,
+                    verificationToken = emailToken,
+                    verificationLink
+                });
+            }
+
+            // ================================
+            // ✅ FINAL RESPONSE
+            // ================================
+            return Ok(new
+            {
+                token,
+                refreshToken,
+                message = "Registration successful. Please verify your email."
+            });
         }
 
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDto dto)
         {
             var user = await _userManager.FindByEmailAsync(dto.Email);
+
+            // ❌ Invalid email OR password
             if (user == null || !(await _userManager.CheckPasswordAsync(user, dto.Password)))
+            {
                 return Unauthorized(new { message = "Invalid credentials" });
+            }
+
+            // 🚨 EMAIL NOT VERIFIED (PUT HERE)
+            if (!user.EmailConfirmed)
+            {
+                return BadRequest(new
+                {
+                    message = "Please verify your email address before signing in."
+                });
+            }
 
             // ✅ Generate tokens
             var token = await _tokenService.GenerateJwtTokenAsync(user);
@@ -130,15 +190,14 @@ namespace SaaSForge.Api.Controllers
             {
                 UserId = user.Id,
                 Token = refreshToken,
-                ExpiresAt = DateTime.UtcNow.AddDays(7), // valid for 7 days
+                ExpiresAt = DateTime.UtcNow.AddDays(7),
                 CreatedAt = DateTime.UtcNow
             };
 
             _context.UserRefreshTokens.Add(userRefresh);
             await _context.SaveChangesAsync();
 
-
-            // ✅ Return all together
+            // ✅ Return response
             return Ok(new
             {
                 token,
@@ -320,6 +379,146 @@ namespace SaaSForge.Api.Controllers
             return Ok(new
             {
                 message = "Password has been reset successfully."
+            });
+        }
+
+        private async Task<(string token, string link)> GenerateEmailConfirmationLinkAsync(ApplicationUser user)
+        {
+            var token = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+
+            var frontendBaseUrl = _config["ClientApp:BaseUrl"];
+            if (string.IsNullOrWhiteSpace(frontendBaseUrl))
+            {
+                throw new InvalidOperationException("Client application base URL is not configured.");
+            }
+
+            var link =
+                $"{frontendBaseUrl.TrimEnd('/')}/verify-email" +
+                $"?email={Uri.EscapeDataString(user.Email ?? string.Empty)}" +
+                $"&token={Uri.EscapeDataString(token)}";
+
+            return (token, link);
+        }
+
+        private async Task SendVerificationEmailAsync(ApplicationUser user)
+        {
+            var (_, verificationLink) = await GenerateEmailConfirmationLinkAsync(user);
+
+            var subject = "Verify your email address";
+            var body = $@"
+                        <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #111827;'>
+                            <h2 style='margin-bottom: 16px;'>Verify your email</h2>
+                            <p>Thanks for creating your account.</p>
+                            <p>Click the button below to verify your email address:</p>
+                            <p style='margin: 24px 0;'>
+                                <a href='{verificationLink}'
+                                   style='background-color:#2563eb;color:white;padding:12px 20px;text-decoration:none;border-radius:8px;display:inline-block;'>
+                                   Verify Email
+                                </a>
+                            </p>
+                            <p>If the button does not work, copy and paste this link into your browser:</p>
+                            <p><a href='{verificationLink}'>{verificationLink}</a></p>
+                            <p>If you did not create this account, you can safely ignore this email.</p>
+                        </div>";
+
+            await _emailService.SendEmailAsync(user.Email!, subject, body);
+        }
+
+        [AllowAnonymous]
+        [HttpPost("confirm-email")]
+        public async Task<IActionResult> ConfirmEmail([FromBody] ConfirmEmailDto dto)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            var email = dto.Email.Trim();
+            var user = await _userManager.FindByEmailAsync(email);
+
+            if (user == null)
+            {
+                return BadRequest(new
+                {
+                    message = "Invalid verification request."
+                });
+            }
+
+            if (user.EmailConfirmed)
+            {
+                return Ok(new
+                {
+                    message = "Email is already verified."
+                });
+            }
+
+            var result = await _userManager.ConfirmEmailAsync(user, dto.Token);
+
+            if (!result.Succeeded)
+            {
+                return BadRequest(new
+                {
+                    message = "Email verification failed.",
+                    errors = result.Errors.Select(e => e.Description).ToList()
+                });
+            }
+
+            return Ok(new
+            {
+                message = "Email verified successfully."
+            });
+        }
+
+        [AllowAnonymous]
+        [HttpPost("resend-verification-email")]
+        public async Task<IActionResult> ResendVerificationEmail([FromBody] ResendVerificationEmailDto dto)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            var genericMessage = "If an account exists for this email, a verification link has been sent.";
+
+            var email = dto.Email.Trim();
+            var user = await _userManager.FindByEmailAsync(email);
+
+            if (user == null)
+            {
+                return Ok(new
+                {
+                    message = genericMessage
+                });
+            }
+
+            if (user.EmailConfirmed)
+            {
+                return Ok(new
+                {
+                    message = "Email is already verified."
+                });
+            }
+
+            await SendVerificationEmailAsync(user);
+
+            var returnTokenInDevelopment =
+                bool.TryParse(_config["EmailConfirmation:ReturnTokenInDevelopment"], out var flag) && flag;
+
+            if (_env.IsDevelopment() && returnTokenInDevelopment)
+            {
+                var (token, link) = await GenerateEmailConfirmationLinkAsync(user);
+
+                return Ok(new
+                {
+                    message = genericMessage,
+                    verificationToken = token,
+                    verificationLink = link
+                });
+            }
+
+            return Ok(new
+            {
+                message = genericMessage
             });
         }
 

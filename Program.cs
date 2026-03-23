@@ -148,6 +148,9 @@ builder.Services.Configure<ClientAppSettings>(
 builder.Services.Configure<PasswordResetSettings>(
     builder.Configuration.GetSection("PasswordReset"));
 
+builder.Services.Configure<EmailConfirmationSettings>(
+    builder.Configuration.GetSection("EmailConfirmation"));
+
 builder.Services.AddSingleton(sp =>
 {
     var config = sp.GetRequiredService<IConfiguration>();
