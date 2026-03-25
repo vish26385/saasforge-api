@@ -77,6 +77,11 @@ namespace SaaSForge.Api.Services.Ai
 
             await _usageService.IncrementAiUsageAsync(business.Id);
 
+            var usage = await _usageService.GetOrCreateUsageAsync(business.Id);
+
+            var remaining = usage.AiRequestLimit - usage.AiRequestsUsed;
+            if (remaining < 0) remaining = 0;
+
             return new AskAiResponseDto
             {
                 Id = entity.Id,
@@ -87,7 +92,8 @@ namespace SaaSForge.Api.Services.Ai
                 InputContextJson = entity.InputContextJson,
                 Response = entity.Response,
                 Model = entity.Model,
-                CreatedAtUtc = entity.CreatedAtUtc
+                CreatedAtUtc = entity.CreatedAtUtc,
+                Remaining = remaining // ✅ ADD THIS
             };
         }
 

@@ -17,7 +17,10 @@ namespace SaaSForge.Api.Services.Usage
             _subscriptionService = subscriptionService;
         }
 
-        public async Task<BusinessUsageResponseDto> GetMyUsageAsync(string ownerUserId)
+        // ============================
+        // GET USAGE
+        // ============================
+        public async Task<UsageResponseDto> GetMyUsageAsync(string ownerUserId)
         {
             var business = await _context.Businesses
                 .AsNoTracking()
@@ -28,44 +31,52 @@ namespace SaaSForge.Api.Services.Usage
                 throw new InvalidOperationException("Business not found for the current user.");
             }
 
+            var subscription = await _subscriptionService.GetOrCreateSubscriptionAsync(business.Id);
             var usage = await GetOrCreateUsageAsync(business.Id);
-            usage = await EnsurePeriodIsCurrentAsync(usage);
 
-            return MapToDto(usage);
+            if (IsPro(subscription.PlanCode))
+            {
+                subscription = await EnsureProCycleAsync(subscription, usage);
+            }
+
+            return MapToDto(usage, subscription);
         }
 
+        // ============================
+        // ENFORCEMENT
+        // ============================
         public async Task EnsureCanUseAiAsync(int businessId)
         {
-            await EnsureSubscriptionIsActiveAsync(businessId);
-
-            var usage = await GetOrCreateUsageAsync(businessId);
-            usage = await EnsurePeriodIsCurrentAsync(usage);
-
-            if (usage.AiRequestsUsed >= usage.AiRequestLimit)
-            {
-                throw new InvalidOperationException("AI request limit reached for the current billing period.");
-            }
-        }
-
-        private async Task EnsureSubscriptionIsActiveAsync(int businessId)
-        {
             var subscription = await _subscriptionService.GetOrCreateSubscriptionAsync(businessId);
+            var usage = await GetOrCreateUsageAsync(businessId);
 
-            if (!string.Equals(subscription.Status, "active", StringComparison.OrdinalIgnoreCase))
+            if (IsPro(subscription.PlanCode))
             {
-                throw new InvalidOperationException("Subscription is not active.");
+                subscription = await EnsureProCycleAsync(subscription, usage);
+
+                if (usage.AiRequestsUsed >= 1000)
+                {
+                    throw new InvalidOperationException(
+                        "You have reached your plan limit. It will reset at the end of your billing cycle.");
+                }
+
+                return;
             }
 
-            if (subscription.EndDateUtc.HasValue && subscription.EndDateUtc.Value <= DateTime.UtcNow)
+            // FREE PLAN (LIFETIME)
+            if (usage.AiRequestsUsed >= 50)
             {
-                throw new InvalidOperationException("Subscription has expired.");
+                throw new InvalidOperationException(
+                    "You have reached the 50-response limit for the Free plan. Upgrade to Pro to continue.");
             }
         }
 
+        // ============================
+        // INCREMENT
+        // ============================
         public async Task IncrementAiUsageAsync(int businessId)
         {
             var usage = await GetOrCreateUsageAsync(businessId);
-            usage = await EnsurePeriodIsCurrentAsync(usage);
 
             usage.AiRequestsUsed += 1;
             usage.LastUpdatedAtUtc = DateTime.UtcNow;
@@ -73,6 +84,9 @@ namespace SaaSForge.Api.Services.Usage
             await _context.SaveChangesAsync();
         }
 
+        // ============================
+        // CREATE / GET USAGE
+        // ============================
         public async Task<BusinessUsage> GetOrCreateUsageAsync(int businessId)
         {
             var usage = await _context.BusinessUsages
@@ -83,27 +97,25 @@ namespace SaaSForge.Api.Services.Usage
                 return usage;
             }
 
-            var freePlan = await _context.SubscriptionPlans
-                .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.Code == "free" && x.IsActive);
-
-            if (freePlan == null)
-            {
-                throw new InvalidOperationException("Default free plan is not configured.");
-            }
-
             var subscription = await _subscriptionService.GetOrCreateSubscriptionAsync(businessId);
-            var nowUtc = DateTime.UtcNow;
-            var currentPeriodStartUtc = GetCurrentPeriodStartUtc(subscription.StartDateUtc, nowUtc);
+
+            var plan = await _context.SubscriptionPlans
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Code == subscription.PlanCode && x.IsActive);
+
+            if (plan == null)
+            {
+                throw new InvalidOperationException("Default plan is not configured.");
+            }
 
             usage = new BusinessUsage
             {
                 BusinessId = businessId,
-                PlanCode = freePlan.Code,
-                CurrentPeriodStartUtc = currentPeriodStartUtc,
+                PlanCode = subscription.PlanCode,
                 AiRequestsUsed = 0,
-                AiRequestLimit = freePlan.MonthlyAiRequestLimit,
-                LastUpdatedAtUtc = nowUtc
+                AiRequestLimit = plan.MonthlyAiRequestLimit,
+                CurrentPeriodStartUtc = subscription.StartDateUtc, // only relevant for pro
+                LastUpdatedAtUtc = DateTime.UtcNow
             };
 
             _context.BusinessUsages.Add(usage);
@@ -112,92 +124,85 @@ namespace SaaSForge.Api.Services.Usage
             return usage;
         }
 
-        private async Task<BusinessUsage> EnsurePeriodIsCurrentAsync(BusinessUsage usage)
+        // ============================
+        // PRO ROLLING 30-DAY CYCLE
+        // ============================
+        private async Task<BusinessSubscription> EnsureProCycleAsync(
+            BusinessSubscription subscription,
+            BusinessUsage usage)
         {
-            var subscription = await _subscriptionService.GetOrCreateSubscriptionAsync(usage.BusinessId);
-            var nowUtc = DateTime.UtcNow;
-            var expectedPeriodStartUtc = GetCurrentPeriodStartUtc(subscription.StartDateUtc, nowUtc);
+            var now = DateTime.UtcNow;
 
-            if (usage.CurrentPeriodStartUtc == expectedPeriodStartUtc)
+            // Initialize if missing
+            if (!subscription.EndDateUtc.HasValue)
             {
-                return usage;
+                subscription.StartDateUtc = now;
+                subscription.EndDateUtc = now.AddDays(30);
+                subscription.UpdatedAtUtc = now;
+
+                usage.AiRequestsUsed = 0;
+                usage.CurrentPeriodStartUtc = now;
+                usage.AiRequestLimit = 1000;
+                usage.LastUpdatedAtUtc = now;
+
+                await _context.SaveChangesAsync();
+                return subscription;
             }
 
-            var plan = await _context.SubscriptionPlans
-                .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.Code == usage.PlanCode && x.IsActive);
-
-            if (plan == null)
+            // If still valid → no reset
+            if (now < subscription.EndDateUtc.Value)
             {
-                throw new InvalidOperationException($"Active plan '{usage.PlanCode}' not found.");
+                return subscription;
             }
 
-            usage.CurrentPeriodStartUtc = expectedPeriodStartUtc;
-            //usage.AiRequestsUsed = 0;
-            usage.AiRequestLimit = plan.MonthlyAiRequestLimit;
-            usage.LastUpdatedAtUtc = nowUtc;
+            // RESET (ROLLING 30 DAYS)
+            subscription.StartDateUtc = now;
+            subscription.EndDateUtc = now.AddDays(30);
+            subscription.UpdatedAtUtc = now;
+
+            usage.AiRequestsUsed = 0;
+            usage.CurrentPeriodStartUtc = now;
+            usage.AiRequestLimit = 1000;
+            usage.LastUpdatedAtUtc = now;
 
             await _context.SaveChangesAsync();
 
-            return usage;
+            return subscription;
         }
 
-        private static DateTime GetCurrentPeriodStartUtc(DateTime subscriptionStartUtc, DateTime nowUtc)
+        // ============================
+        // HELPERS
+        // ============================
+        private static bool IsPro(string? planCode)
         {
-            var anchorDay = subscriptionStartUtc.Day;
+            return string.Equals(planCode, "pro", StringComparison.OrdinalIgnoreCase);
+        }
 
-            var candidateDay = Math.Min(anchorDay, DateTime.DaysInMonth(nowUtc.Year, nowUtc.Month));
-            var candidateStart = new DateTime(
-                nowUtc.Year,
-                nowUtc.Month,
-                candidateDay,
-                subscriptionStartUtc.Hour,
-                subscriptionStartUtc.Minute,
-                subscriptionStartUtc.Second,
-                DateTimeKind.Utc);
-
-            if (nowUtc >= candidateStart)
+        private static UsageResponseDto MapToDto(
+            BusinessUsage usage,
+            BusinessSubscription subscription)
+        {
+            if (IsPro(subscription.PlanCode))
             {
-                return candidateStart;
+                return new UsageResponseDto
+                {
+                    Plan = "pro",
+                    Used = usage.AiRequestsUsed,
+                    Limit = 1000,
+                    Type = "subscription",
+                    CurrentPeriodStartUtc = subscription.StartDateUtc,
+                    CurrentPeriodEndUtc = subscription.EndDateUtc
+                };
             }
 
-            var previousMonth = nowUtc.AddMonths(-1);
-            var previousDay = Math.Min(anchorDay, DateTime.DaysInMonth(previousMonth.Year, previousMonth.Month));
-
-            return new DateTime(
-                previousMonth.Year,
-                previousMonth.Month,
-                previousDay,
-                subscriptionStartUtc.Hour,
-                subscriptionStartUtc.Minute,
-                subscriptionStartUtc.Second,
-                DateTimeKind.Utc);
-        }
-
-        private static DateTime GetNextPeriodStartUtc(DateTime currentPeriodStartUtc)
-        {
-            var nextMonth = currentPeriodStartUtc.AddMonths(1);
-            return new DateTime(
-                nextMonth.Year,
-                nextMonth.Month,
-                Math.Min(currentPeriodStartUtc.Day, DateTime.DaysInMonth(nextMonth.Year, nextMonth.Month)),
-                currentPeriodStartUtc.Hour,
-                currentPeriodStartUtc.Minute,
-                currentPeriodStartUtc.Second,
-                DateTimeKind.Utc);
-        }
-
-        private static BusinessUsageResponseDto MapToDto(BusinessUsage usage)
-        {
-            return new BusinessUsageResponseDto
+            return new UsageResponseDto
             {
-                BusinessId = usage.BusinessId,
-                PlanCode = usage.PlanCode,
-                CurrentPeriodStartUtc = usage.CurrentPeriodStartUtc,
-                AiRequestsUsed = usage.AiRequestsUsed,
-                AiRequestLimit = usage.AiRequestLimit,
-                RemainingAiRequests = Math.Max(usage.AiRequestLimit - usage.AiRequestsUsed, 0),
-                LastUpdatedAtUtc = usage.LastUpdatedAtUtc
+                Plan = "free",
+                Used = usage.AiRequestsUsed,
+                Limit = 50,
+                Type = "lifetime",
+                CurrentPeriodStartUtc = null,
+                CurrentPeriodEndUtc = null
             };
         }
     }

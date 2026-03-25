@@ -1,6 +1,6 @@
 ﻿namespace SaaSForge.Api.DTOs.Usage
 {
-    public class BusinessUsageResponseDto
+    public class BusinessUsageInternalDto
     {
         public int BusinessId { get; set; }
         public string PlanCode { get; set; } = string.Empty;

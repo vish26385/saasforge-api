@@ -11,5 +11,6 @@
         public string Response { get; set; } = string.Empty;
         public string Model { get; set; } = string.Empty;
         public DateTime CreatedAtUtc { get; set; }
+        public int Remaining { get; set; }
     }
 }
