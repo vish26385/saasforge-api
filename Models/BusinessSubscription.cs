@@ -13,6 +13,13 @@
         public DateTime StartDateUtc { get; set; }
         public DateTime? EndDateUtc { get; set; }
 
+        public string? PaymentProvider { get; set; }          // "razorpay"
+        public string? ProviderOrderId { get; set; }          // Razorpay order id
+        public string? ProviderPaymentId { get; set; }        // Razorpay payment id
+        public decimal? AmountPaid { get; set; }              // 499, 999, etc
+        public string? Currency { get; set; }                 // "INR"
+
+
         public DateTime CreatedAtUtc { get; set; }
         public DateTime UpdatedAtUtc { get; set; }
     }

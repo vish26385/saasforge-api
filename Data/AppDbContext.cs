@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Razorpay.Api;
 using SaaSForge.Api.Models;
 using SaaSForge.Api.Models.Auth;
 
@@ -18,6 +19,8 @@ namespace SaaSForge.Api.Data
         public DbSet<SubscriptionPlan> SubscriptionPlans { get; set; }
         public DbSet<BusinessUsage> BusinessUsages { get; set; }
         public DbSet<BusinessSubscription> BusinessSubscriptions { get; set; }
+        public DbSet<PaymentWebhookLog> PaymentWebhookLogs { get; set; }
+        public DbSet<PaymentOrder> PaymentOrders { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -202,6 +205,55 @@ namespace SaaSForge.Api.Data
                 b.Property(x => x.UpdatedAtUtc)
                     .IsRequired()
                     .HasColumnType("timestamp with time zone");
+
+                b.Property(x => x.PaymentProvider)
+                    .HasMaxLength(50);
+
+                b.Property(x => x.ProviderOrderId)
+                    .HasMaxLength(100);
+
+                b.Property(x => x.ProviderPaymentId)
+                    .HasMaxLength(100);
+
+                b.Property(x => x.Currency)
+                    .HasMaxLength(10);
+
+                b.Property(x => x.AmountPaid)
+                    .HasPrecision(18, 2);
+
+                b.HasIndex(x => x.ProviderPaymentId)
+                    .IsUnique();
+            });
+
+            modelBuilder.Entity<PaymentOrder>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+
+                entity.Property(x => x.ProviderOrderId)
+                    .HasMaxLength(100)
+                    .IsRequired();
+
+                entity.HasIndex(x => x.ProviderOrderId)
+                    .IsUnique();
+
+                entity.Property(x => x.ProviderPaymentId)
+                    .HasMaxLength(100);
+
+                entity.HasIndex(x => x.ProviderPaymentId)
+                    .IsUnique()
+                    .HasFilter("\"ProviderPaymentId\" IS NOT NULL");
+
+                entity.Property(x => x.Currency)
+                    .HasMaxLength(10);
+
+                entity.Property(x => x.Status)
+                    .HasMaxLength(20);
+
+                entity.Property(x => x.PlanCode)
+                    .HasMaxLength(20);
+
+                entity.Property(x => x.Amount)
+                    .HasPrecision(18, 2);
             });
         }
     }

@@ -32,6 +32,9 @@ namespace SaaSForge.Api.Services.Ai
                 throw new InvalidOperationException("Business not found for the current user.");
             }
 
+            // ✅ ADD HERE
+            await _usageService.EnsureSubscriptionStateAsync(business.Id);
+
             await _usageService.EnsureCanUseAiAsync(business.Id);
 
             var apiKey = _configuration["OpenAI:ApiKey"];

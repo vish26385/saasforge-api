@@ -2,6 +2,7 @@
 using SaaSForge.Api.Data;
 using SaaSForge.Api.DTOs.Subscription;
 using SaaSForge.Api.Models;
+using SaaSForge.Api.Services.Usage;
 
 namespace SaaSForge.Api.Services.Subscription
 {
@@ -24,6 +25,8 @@ namespace SaaSForge.Api.Services.Subscription
             {
                 throw new InvalidOperationException("Business not found for the current user.");
             }
+
+            await EnsureSubscriptionStateAsync(business.Id);
 
             var subscription = await GetOrCreateSubscriptionAsync(business.Id);
             return MapToDto(subscription);
@@ -64,7 +67,7 @@ namespace SaaSForge.Api.Services.Subscription
 
             return subscription;
         }
-
+        
         public async Task<ChangePlanResultDto> ChangePlanAsync(string ownerUserId, string planCode)
         {
             if (string.IsNullOrWhiteSpace(planCode))
@@ -178,6 +181,53 @@ namespace SaaSForge.Api.Services.Subscription
                 CreatedAtUtc = subscription.CreatedAtUtc,
                 UpdatedAtUtc = subscription.UpdatedAtUtc
             };
+        }
+
+        private async Task EnsureSubscriptionStateAsync(int businessId)
+        {
+            var now = DateTime.UtcNow;
+
+            var subscription = await _context.BusinessSubscriptions
+                .FirstOrDefaultAsync(x => x.BusinessId == businessId);
+
+            if (subscription == null)
+                return;
+
+            var usage = await _context.BusinessUsages
+                  .FirstOrDefaultAsync(x => x.BusinessId == businessId);
+
+            if (subscription.PlanCode == "pro" &&
+                subscription.Status == "active" &&
+                subscription.EndDateUtc.HasValue &&
+                subscription.EndDateUtc.Value <= now &&
+                usage != null &&
+                usage.AiRequestsUsed <= 50)
+            {
+                subscription.PlanCode = "free";
+                subscription.Status = "active";
+                subscription.UpdatedAtUtc = now;
+
+                if (usage != null)
+                {
+                    usage.PlanCode = "free";
+                    usage.AiRequestLimit = 50;
+                    usage.LastUpdatedAtUtc = now;
+                }
+
+                await _context.SaveChangesAsync();
+            }
+            else if (subscription.PlanCode == "pro" &&
+                     subscription.Status == "active" &&
+                     subscription.EndDateUtc.HasValue &&
+                     subscription.EndDateUtc.Value <= now &&
+                     usage != null &&
+                     usage.AiRequestsUsed > 50)
+            {
+                subscription.Status = "expired";
+                subscription.UpdatedAtUtc = now;
+
+                await _context.SaveChangesAsync();
+            }
         }
     }
 }

@@ -9,5 +9,6 @@ namespace SaaSForge.Api.Services.Usage
         Task EnsureCanUseAiAsync(int businessId);
         Task IncrementAiUsageAsync(int businessId);
         Task<BusinessUsage> GetOrCreateUsageAsync(int businessId);
+        Task EnsureSubscriptionStateAsync(int businessId);
     }
 }
