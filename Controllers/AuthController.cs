@@ -214,36 +214,7 @@ namespace SaaSForge.Api.Controllers
                     message = "Please verify your email address before signing in."
                 });
             }
-
-            //// ✅ Generate tokens
-            //var token = await _tokenService.GenerateJwtTokenAsync(user);
-            //var refreshToken = await _tokenService.GenerateRefreshTokenAsync();
-
-            //// Save refresh token to DB
-            //var userRefresh = new UserRefreshToken
-            //{
-            //    UserId = user.Id,
-            //    Token = refreshToken,
-            //    ExpiresAt = DateTime.UtcNow.AddDays(7),
-            //    CreatedAt = DateTime.UtcNow
-            //};
-
-            //_context.UserRefreshTokens.Add(userRefresh);
-            //await _context.SaveChangesAsync();
-
-            //// ✅ Return response
-            //return Ok(new
-            //{
-            //    token,
-            //    refreshToken,
-            //    user = new
-            //    {
-            //        user.Id,
-            //        user.Email,
-            //        user.UserName
-            //    }
-            //});
-
+            
             var authResponse = await BuildAuthResponseAsync(user, false);
             return Ok(authResponse);
         }
