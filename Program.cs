@@ -136,6 +136,7 @@ builder.Services.AddScoped<IAiService, AiService>();
 builder.Services.AddScoped<IUsageService, UsageService>();
 builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
 builder.Services.AddScoped<IPaymentActivationService, PaymentActivationService>();
+builder.Services.AddScoped<GoogleTokenValidatorService>();
 
 // ✅ Bind ExpoPush from appsettings.json using ONE options class (Configurations)
 builder.Services.Configure<ExpoPushOptions>(

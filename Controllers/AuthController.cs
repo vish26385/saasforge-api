@@ -13,6 +13,7 @@ using System.Text;
 using SaaSForge.Api.Models.Auth;
 using SaaSForge.Api.Services.Auth;
 using SaaSForge.Api.Services.Common;
+using Google.Apis.Auth;
 
 namespace SaaSForge.Api.Controllers
 {
@@ -28,6 +29,7 @@ namespace SaaSForge.Api.Controllers
         private readonly AppDbContext _context;
         private readonly IEmailService _emailService;
         private readonly IWebHostEnvironment _env;
+        private readonly GoogleTokenValidatorService _googleTokenValidatorService;
 
         public AuthController(UserManager<ApplicationUser> userManager,
                               RoleManager<IdentityRole> roleManager,
@@ -35,7 +37,8 @@ namespace SaaSForge.Api.Controllers
                               TokenService tokenService, 
                               AppDbContext context,
                               IEmailService emailService,
-                              IWebHostEnvironment env
+                              IWebHostEnvironment env,
+                              GoogleTokenValidatorService googleTokenValidatorService
                               )
         {
             _userManager = userManager;
@@ -45,6 +48,37 @@ namespace SaaSForge.Api.Controllers
             _context = context;
             _emailService = emailService;
             _env = env;
+            _googleTokenValidatorService = googleTokenValidatorService;
+        }
+
+        private async Task<AuthResponseDto> BuildAuthResponseAsync(ApplicationUser user, bool isNewUser)
+        {
+            var token = await _tokenService.GenerateJwtTokenAsync(user);
+            var refreshToken = await _tokenService.GenerateRefreshTokenAsync();
+
+            var userRefresh = new UserRefreshToken
+            {
+                UserId = user.Id,
+                Token = refreshToken,
+                ExpiresAt = DateTime.UtcNow.AddDays(7),
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.UserRefreshTokens.Add(userRefresh);
+            await _context.SaveChangesAsync();
+
+            return new AuthResponseDto
+            {
+                Token = token,
+                RefreshToken = refreshToken,
+                IsNewUser = isNewUser,
+                User = new AuthUserDto
+                {
+                    Id = user.Id,
+                    Email = user.Email,
+                    UserName = user.UserName
+                }
+            };
         }
 
         [HttpPost("register")]
@@ -181,34 +215,142 @@ namespace SaaSForge.Api.Controllers
                 });
             }
 
-            // ✅ Generate tokens
-            var token = await _tokenService.GenerateJwtTokenAsync(user);
-            var refreshToken = await _tokenService.GenerateRefreshTokenAsync();
+            //// ✅ Generate tokens
+            //var token = await _tokenService.GenerateJwtTokenAsync(user);
+            //var refreshToken = await _tokenService.GenerateRefreshTokenAsync();
 
-            // Save refresh token to DB
-            var userRefresh = new UserRefreshToken
+            //// Save refresh token to DB
+            //var userRefresh = new UserRefreshToken
+            //{
+            //    UserId = user.Id,
+            //    Token = refreshToken,
+            //    ExpiresAt = DateTime.UtcNow.AddDays(7),
+            //    CreatedAt = DateTime.UtcNow
+            //};
+
+            //_context.UserRefreshTokens.Add(userRefresh);
+            //await _context.SaveChangesAsync();
+
+            //// ✅ Return response
+            //return Ok(new
+            //{
+            //    token,
+            //    refreshToken,
+            //    user = new
+            //    {
+            //        user.Id,
+            //        user.Email,
+            //        user.UserName
+            //    }
+            //});
+
+            var authResponse = await BuildAuthResponseAsync(user, false);
+            return Ok(authResponse);
+        }
+
+        [AllowAnonymous]
+        [HttpPost("google-login")]
+        public async Task<IActionResult> GoogleLogin([FromBody] GoogleLoginDto dto)
+        {
+            if (!ModelState.IsValid)
             {
-                UserId = user.Id,
-                Token = refreshToken,
-                ExpiresAt = DateTime.UtcNow.AddDays(7),
-                CreatedAt = DateTime.UtcNow
-            };
+                return BadRequest(ModelState);
+            }
 
-            _context.UserRefreshTokens.Add(userRefresh);
-            await _context.SaveChangesAsync();
+            GoogleJsonWebSignature.Payload payload;
 
-            // ✅ Return response
-            return Ok(new
+            try
             {
-                token,
-                refreshToken,
-                user = new
+                payload = await _googleTokenValidatorService.ValidateAsync(dto.IdToken);
+            }
+            catch
+            {
+                return Unauthorized(new { message = "Invalid Google ID token." });
+            }
+
+            if (string.IsNullOrWhiteSpace(payload.Subject) ||
+                string.IsNullOrWhiteSpace(payload.Email))
+            {
+                return Unauthorized(new { message = "Google account information is incomplete." });
+            }
+
+            // 1) Try by external login first
+            var user = await _userManager.FindByLoginAsync("Google", payload.Subject);
+
+            // 2) If not found, try by email
+            if (user == null)
+            {
+                user = await _userManager.FindByEmailAsync(payload.Email);
+            }
+
+            var isNewUser = false;
+
+            // 3) Create new local Identity user if none exists
+            if (user == null)
+            {
+                user = new ApplicationUser
                 {
-                    user.Id,
-                    user.Email,
-                    user.UserName
+                    UserName = payload.Email,
+                    Email = payload.Email,
+                    FullName = payload.Name ?? payload.Email,
+                    EmailConfirmed = payload.EmailVerified
+                };
+
+                var createResult = await _userManager.CreateAsync(user);
+
+                if (!createResult.Succeeded)
+                {
+                    return BadRequest(new
+                    {
+                        message = "Failed to create local user for Google login.",
+                        errors = createResult.Errors.Select(e => e.Description).ToList()
+                    });
                 }
-            });
+
+                if (!await _roleManager.RoleExistsAsync("User"))
+                {
+                    await _roleManager.CreateAsync(new IdentityRole("User"));
+                }
+
+                isNewUser = true;
+
+                await _userManager.AddToRoleAsync(user, "User");
+            }
+            else
+            {
+                // If the user already exists locally and Google says email is verified,
+                // ensure local EmailConfirmed is true.
+                if (!user.EmailConfirmed && payload.EmailVerified)
+                {
+                    user.EmailConfirmed = true;
+                    await _userManager.UpdateAsync(user);
+                }
+            }
+
+            // 4) Link Google login if not already linked
+            var existingLogins = await _userManager.GetLoginsAsync(user);
+            var alreadyLinked = existingLogins.Any(x =>
+                x.LoginProvider == "Google" && x.ProviderKey == payload.Subject);
+
+            if (!alreadyLinked)
+            {
+                var addLoginResult = await _userManager.AddLoginAsync(
+                    user,
+                    new UserLoginInfo("Google", payload.Subject, "Google"));
+
+                if (!addLoginResult.Succeeded)
+                {
+                    return BadRequest(new
+                    {
+                        message = "Failed to link Google login to local account.",
+                        errors = addLoginResult.Errors.Select(e => e.Description).ToList()
+                    });
+                }
+            }
+
+            // 5) Return same auth response shape as normal login
+            var authResponse = await BuildAuthResponseAsync(user, isNewUser);
+            return Ok(authResponse);
         }
 
         [AllowAnonymous]
