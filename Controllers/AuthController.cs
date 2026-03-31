@@ -140,9 +140,9 @@ namespace SaaSForge.Api.Controllers
                 $"?email={Uri.EscapeDataString(user.Email!)}" +
                 $"&token={Uri.EscapeDataString(emailToken)}";
 
-            var subject = "Verify your email - SaaSForge";
+            var subject = "Verify your email - LeadFlow AI";
             var body = $@"
-        <h2>Welcome to SaaSForge</h2>
+        <h2>Welcome to LeadFlow AI</h2>
         <p>Please verify your email by clicking below:</p>
         <a href='{verificationLink}'>Verify Email</a>
         <br/><br/>

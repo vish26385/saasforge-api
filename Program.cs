@@ -102,7 +102,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "SaaSForge API", Version = "v1" });
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "LeadFlow AI API", Version = "v1" });
 
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
@@ -219,7 +219,7 @@ static async System.Threading.Tasks.Task SeedRolesAndAdminUserAsync(WebApplicati
         {
             UserName = adminEmail,
             Email = adminEmail,
-            FullName = "SaaSForge Admin"
+            FullName = "LeadFlowAI Admin"
         };
 
         var result = await userManager.CreateAsync(adminUser, "Admin@123");
@@ -275,7 +275,7 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "SaaSForge API v1");
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "LeadFlow AI API v1");
     c.RoutePrefix = "swagger";
 });
 
@@ -289,7 +289,7 @@ app.UseAuthorization();
 app.MapControllers();
 
 // Simple health root
-app.MapGet("/", () => Results.Ok("✅ SaaSForge API running"));
+app.MapGet("/", () => Results.Ok("✅ LeadFlow AI API running"));
 
 // ⬇️ ADD THIS BEFORE app.Run()
 await SeedRolesAndAdminUserAsync(app);
