@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SaaSForge.Api.Data;
@@ -11,9 +12,11 @@ using SaaSForge.Api.Data;
 namespace SaaSForge.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260403143314_AddLeadAlertsNew")]
+    partial class AddLeadAlertsNew
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -836,9 +839,6 @@ namespace SaaSForge.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime?>("AcknowledgedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<int>("BusinessId")
                         .HasColumnType("integer");
 
@@ -858,26 +858,15 @@ namespace SaaSForge.Api.Migrations
                     b.Property<DateTime?>("ResolvedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("Severity")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<DateTime?>("SuppressedUntilUtc")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<string>("Type")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("BusinessId", "IsResolved", "CreatedAtUtc");
+                    b.HasIndex("LeadId");
 
-                    b.HasIndex("LeadId", "Type", "IsResolved");
-
-                    b.ToTable("LeadAlerts", (string)null);
+                    b.ToTable("LeadAlerts");
                 });
 
             modelBuilder.Entity("SaaSForge.Api.Modules.Leads.Entities.LeadMessage", b =>
@@ -1159,7 +1148,7 @@ namespace SaaSForge.Api.Migrations
             modelBuilder.Entity("SaaSForge.Api.Modules.Leads.Entities.LeadAlert", b =>
                 {
                     b.HasOne("SaaSForge.Api.Modules.Leads.Entities.Lead", "Lead")
-                        .WithMany("Alerts")
+                        .WithMany()
                         .HasForeignKey("LeadId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -1213,8 +1202,6 @@ namespace SaaSForge.Api.Migrations
                     b.Navigation("Activities");
 
                     b.Navigation("AiSuggestions");
-
-                    b.Navigation("Alerts");
 
                     b.Navigation("LeadTags");
 

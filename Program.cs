@@ -8,8 +8,11 @@ using Microsoft.OpenApi.Models;
 using OpenAI; // ✅ Official SDK
 using SaaSForge.Api.Configurations;
 using SaaSForge.Api.Data;
+using SaaSForge.Api.Infrastructure.BackgroundWorkers;
 using SaaSForge.Api.Models;
 using SaaSForge.Api.Models.Auth;
+using SaaSForge.Api.Modules.Leads.Interfaces;
+using SaaSForge.Api.Modules.Leads.Services;
 using SaaSForge.Api.Services.Ai;
 using SaaSForge.Api.Services.Auth;
 using SaaSForge.Api.Services.Business;
@@ -137,6 +140,21 @@ builder.Services.AddScoped<IUsageService, UsageService>();
 builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
 builder.Services.AddScoped<IPaymentActivationService, PaymentActivationService>();
 builder.Services.AddScoped<GoogleTokenValidatorService>();
+builder.Services.AddScoped<ILeadService, LeadService>();
+builder.Services.AddScoped<ILeadAiService, LeadAiService>();
+builder.Services.AddScoped<ILeadTagService, LeadTagService>();
+builder.Services.AddScoped<ILeadActivityService, LeadActivityService>();
+builder.Services.AddScoped<ILeadFollowUpIntelligenceService, LeadFollowUpIntelligenceService>();
+builder.Services.AddScoped<ILeadAttentionIntelligenceService, LeadAttentionIntelligenceService>();
+builder.Services.AddScoped<ILeadAlertService, LeadAlertService>();
+builder.Services.AddHostedService<LeadAlertsWorker>();
+builder.Services.AddScoped<ILeadAiScenarioResolver, LeadAiScenarioResolver>();
+builder.Services.AddScoped<ILeadAiPromptBuilder, LeadAiPromptBuilder>();
+builder.Services.AddScoped<ILeadAiSuggestionService, LeadAiSuggestionService>();
+builder.Services.AddHttpClient<IOpenAiService, OpenAiService>(client =>
+{
+    client.DefaultRequestHeaders.Add("Authorization", $"Bearer {builder.Configuration["OpenAI:ApiKey"]}");
+});
 
 // ✅ Bind ExpoPush from appsettings.json using ONE options class (Configurations)
 builder.Services.Configure<ExpoPushOptions>(

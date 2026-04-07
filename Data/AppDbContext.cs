@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Razorpay.Api;
 using SaaSForge.Api.Models;
 using SaaSForge.Api.Models.Auth;
+using SaaSForge.Api.Modules.Leads.Entities;
 
 namespace SaaSForge.Api.Data
 {
@@ -22,10 +23,18 @@ namespace SaaSForge.Api.Data
         public DbSet<PaymentWebhookLog> PaymentWebhookLogs { get; set; }
         public DbSet<PaymentOrder> PaymentOrders { get; set; }
 
+        public DbSet<Lead> Leads => Set<Lead>();
+        public DbSet<LeadMessage> LeadMessages => Set<LeadMessage>();
+        public DbSet<LeadNote> LeadNotes => Set<LeadNote>();
+        public DbSet<LeadTag> LeadTags => Set<LeadTag>();
+        public DbSet<LeadTagMap> LeadTagMaps => Set<LeadTagMap>();
+        public DbSet<LeadActivity> LeadActivities => Set<LeadActivity>();
+        public DbSet<LeadAiSuggestion> LeadAiSuggestions => Set<LeadAiSuggestion>();
+        public DbSet<LeadAlert> LeadAlerts => Set<LeadAlert>();
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
-
+            modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
             modelBuilder.Entity<UserDeviceToken>()
                 .HasIndex(x => new { x.UserId, x.ExpoPushToken })
                 .IsUnique();
@@ -84,14 +93,17 @@ namespace SaaSForge.Api.Data
 
                 b.Property(x => x.Prompt)
                     .IsRequired()
-                    .HasMaxLength(4000);
+                    .HasColumnType("text");
 
-                b.Property(x => x.SystemPrompt);
+                b.Property(x => x.SystemPrompt)
+                    .HasColumnType("text");
 
-                b.Property(x => x.InputContextJson);
+                b.Property(x => x.InputContextJson)
+                    .HasColumnType("text");
 
                 b.Property(x => x.Response)
-                    .IsRequired();
+                    .IsRequired()
+                    .HasColumnType("text");
 
                 b.Property(x => x.Model)
                     .IsRequired()
@@ -255,6 +267,8 @@ namespace SaaSForge.Api.Data
                 entity.Property(x => x.Amount)
                     .HasPrecision(18, 2);
             });
+
+
         }
     }
 }

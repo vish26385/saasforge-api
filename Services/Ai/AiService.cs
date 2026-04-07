@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.CodeDom;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using OpenAI.Chat;
 using SaaSForge.Api.Data;
@@ -66,10 +67,10 @@ namespace SaaSForge.Api.Services.Ai
             var entity = new AiConversation
             {
                 BusinessId = business.Id,
-                FeatureType = dto.FeatureType.Trim(),
-                Prompt = dto.Prompt.Trim(),
-                SystemPrompt = dto.SystemPrompt,
-                InputContextJson = dto.InputContextJson,
+                FeatureType = dto.FeatureType?.Trim() ?? string.Empty,
+                Prompt = dto.Prompt?.Trim() ?? string.Empty,
+                SystemPrompt = string.IsNullOrWhiteSpace(dto.SystemPrompt) ? null : dto.SystemPrompt.Trim(),
+                InputContextJson = string.IsNullOrWhiteSpace(dto.InputContextJson) ? null : dto.InputContextJson,
                 Response = aiText,
                 Model = model,
                 CreatedAtUtc = DateTime.UtcNow
