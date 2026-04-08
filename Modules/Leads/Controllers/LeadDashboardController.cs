@@ -139,8 +139,8 @@ public class LeadDashboardController : ControllerBase
     private int GetBusinessId()
     {
         var businessIdValue =
-            User.FindFirstValue("businessId") ??
             User.FindFirstValue("BusinessId") ??
+            User.FindFirstValue("businessId") ??
             User.FindFirstValue("business_id");
 
         if (string.IsNullOrWhiteSpace(businessIdValue))

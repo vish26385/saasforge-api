@@ -25,7 +25,7 @@ public sealed class LeadFollowUpIntelligenceController : ControllerBase
         [FromQuery] int takePerBucket = 10,
         CancellationToken cancellationToken = default)
     {
-        var businessId = GetBusinessIdFromClaims();
+        var businessId = GetBusinessId();
 
         var result = await _leadFollowUpIntelligenceService.GetFollowUpIntelligenceAsync(
             businessId,
@@ -35,15 +35,21 @@ public sealed class LeadFollowUpIntelligenceController : ControllerBase
         return Ok(result);
     }
 
-    private int GetBusinessIdFromClaims()
+    private int GetBusinessId()
     {
         var businessIdValue =
+            User.FindFirstValue("BusinessId") ??
             User.FindFirstValue("businessId") ??
-            User.FindFirstValue("BusinessId");
+            User.FindFirstValue("business_id");
 
-        if (string.IsNullOrWhiteSpace(businessIdValue) || !int.TryParse(businessIdValue, out var businessId))
+        if (string.IsNullOrWhiteSpace(businessIdValue))
         {
-            throw new UnauthorizedAccessException("BusinessId claim is missing.");
+            throw new UnauthorizedAccessException("BusinessId claim not found.");
+        }
+
+        if (!int.TryParse(businessIdValue, out var businessId))
+        {
+            throw new UnauthorizedAccessException("BusinessId claim is invalid.");
         }
 
         return businessId;

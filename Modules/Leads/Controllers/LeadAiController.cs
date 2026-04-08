@@ -57,12 +57,22 @@ public class LeadAiController : ControllerBase
 
     private int GetBusinessId()
     {
-        var businessId = User.FindFirstValue("businessId");
+        var businessIdValue =
+            User.FindFirstValue("BusinessId") ??
+            User.FindFirstValue("businessId") ??
+            User.FindFirstValue("business_id");
 
-        if (string.IsNullOrWhiteSpace(businessId))
-            throw new UnauthorizedAccessException("BusinessId claim missing.");
+        if (string.IsNullOrWhiteSpace(businessIdValue))
+        {
+            throw new UnauthorizedAccessException("BusinessId claim not found.");
+        }
 
-        return int.Parse(businessId);
+        if (!int.TryParse(businessIdValue, out var businessId))
+        {
+            throw new UnauthorizedAccessException("BusinessId claim is invalid.");
+        }
+
+        return businessId;
     }
 
     private string GetUserId()

@@ -113,14 +113,22 @@ public class LeadsController : ControllerBase
 
     private int GetBusinessId()
     {
-        var claims = User.Claims.Select(c => new { c.Type, c.Value }).ToList();
-
-        var businessIdValue = User.FindFirstValue("businessId");
+        var businessIdValue =
+            User.FindFirstValue("BusinessId") ??
+            User.FindFirstValue("businessId") ??
+            User.FindFirstValue("business_id");
 
         if (string.IsNullOrWhiteSpace(businessIdValue))
+        {
             throw new UnauthorizedAccessException("BusinessId claim not found.");
+        }
 
-        return int.Parse(businessIdValue);
+        if (!int.TryParse(businessIdValue, out var businessId))
+        {
+            throw new UnauthorizedAccessException("BusinessId claim is invalid.");
+        }
+
+        return businessId;
     }
 
     [HttpPut("{id:guid}/messages/{messageId:guid}/sent")]
