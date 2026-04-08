@@ -88,14 +88,27 @@ builder.Services.AddAuthentication(options =>
 // ---------------------------
 // 4) CORS (Expo / Web / Mobile)
 // ---------------------------
+//builder.Services.AddCors(options =>
+//{
+//    options.AddPolicy("AllowAll",
+//        x => x
+//        .AllowAnyHeader()
+//        .AllowAnyMethod()
+//        .AllowCredentials()
+//        .SetIsOriginAllowed(_ => true));   // TEMPORARY FOR DEV
+//});
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll",
+    options.AddPolicy("AllowFrontend",
         x => x
+        .WithOrigins(
+            "http://localhost:3000",              // local dev
+            "https://leadflow-ai-nine.vercel.app"         // production frontend
+        )
         .AllowAnyHeader()
         .AllowAnyMethod()
-        .AllowCredentials()
-        .SetIsOriginAllowed(_ => true));   // TEMPORARY FOR DEV
+        .AllowCredentials());
 });
 
 // ---------------------------
@@ -300,7 +313,8 @@ app.UseSwaggerUI(c =>
 app.UseHttpsRedirection();
 
 app.UseRouting();
-app.UseCors("AllowAll");   // between UseRouting and Auth
+//app.UseCors("AllowAll");   // between UseRouting and Auth
+app.UseCors("AllowFrontend");   // between UseRouting and Auth
 app.UseAuthentication();
 app.UseAuthorization();
 
