@@ -1,16 +1,11 @@
 ﻿//using SaaSForge.Api.Data;
 //using SaaSForge.Api.DTOs;
-//using SaaSForge.Api.Models;
+//using SaaSForge.Api.Models.Auth;
 //using Microsoft.AspNetCore.Authorization;
 //using Microsoft.AspNetCore.Identity;
-//using Microsoft.AspNetCore.Identity.Data;
 //using Microsoft.AspNetCore.Mvc;
 //using Microsoft.EntityFrameworkCore;
-//using Microsoft.IdentityModel.Tokens;
-//using System.IdentityModel.Tokens.Jwt;
 //using System.Security.Claims;
-//using System.Text;
-//using SaaSForge.Api.Models.Auth;
 //using SaaSForge.Api.Services.Auth;
 //using SaaSForge.Api.Services.Common;
 //using Google.Apis.Auth;
@@ -24,22 +19,21 @@
 //        private readonly UserManager<ApplicationUser> _userManager;
 //        private readonly RoleManager<IdentityRole> _roleManager;
 //        private readonly IConfiguration _config;
-//        private static readonly Dictionary<string, string> _refreshTokens = new(); // demo in-memory store
 //        private readonly TokenService _tokenService;
 //        private readonly AppDbContext _context;
 //        private readonly IEmailService _emailService;
 //        private readonly IWebHostEnvironment _env;
 //        private readonly GoogleTokenValidatorService _googleTokenValidatorService;
 
-//        public AuthController(UserManager<ApplicationUser> userManager,
-//                              RoleManager<IdentityRole> roleManager,
-//                              IConfiguration config, 
-//                              TokenService tokenService, 
-//                              AppDbContext context,
-//                              IEmailService emailService,
-//                              IWebHostEnvironment env,
-//                              GoogleTokenValidatorService googleTokenValidatorService
-//                              )
+//        public AuthController(
+//            UserManager<ApplicationUser> userManager,
+//            RoleManager<IdentityRole> roleManager,
+//            IConfiguration config,
+//            TokenService tokenService,
+//            AppDbContext context,
+//            IEmailService emailService,
+//            IWebHostEnvironment env,
+//            GoogleTokenValidatorService googleTokenValidatorService)
 //        {
 //            _userManager = userManager;
 //            _roleManager = roleManager;
@@ -51,8 +45,28 @@
 //            _googleTokenValidatorService = googleTokenValidatorService;
 //        }
 
+//        private async Task RevokeActiveRefreshTokensAsync(string userId)
+//        {
+//            var activeTokens = await _context.UserRefreshTokens
+//                .Where(x => x.UserId == userId && x.RevokedAt == null)
+//                .ToListAsync();
+
+//            if (activeTokens.Count == 0)
+//                return;
+
+//            var nowUtc = DateTime.UtcNow;
+//            foreach (var token in activeTokens)
+//            {
+//                token.RevokedAt = nowUtc;
+//            }
+
+//            await _context.SaveChangesAsync();
+//        }
+
 //        private async Task<AuthResponseDto> BuildAuthResponseAsync(ApplicationUser user, bool isNewUser)
 //        {
+//            await RevokeActiveRefreshTokensAsync(user.Id);
+
 //            var token = await _tokenService.GenerateJwtTokenAsync(user);
 //            var refreshToken = await _tokenService.GenerateRefreshTokenAsync();
 
@@ -60,7 +74,7 @@
 //            {
 //                UserId = user.Id,
 //                Token = refreshToken,
-//                ExpiresAt = DateTime.UtcNow.AddDays(7),
+//                ExpiresAt = DateTime.UtcNow.AddDays(_tokenService.GetRefreshTokenDays()),
 //                CreatedAt = DateTime.UtcNow
 //            };
 
@@ -84,16 +98,14 @@
 //        [HttpPost("register")]
 //        public async Task<IActionResult> Register([FromBody] RegisterDto dto)
 //        {
-//            // 🧠 Create the new Identity user
 //            var user = new ApplicationUser
 //            {
 //                UserName = dto.Email,
 //                Email = dto.Email,
 //                FullName = dto.FullName,
-//                EmailConfirmed = false // IMPORTANT
+//                EmailConfirmed = false
 //            };
 
-//            // ✅ Save user
 //            var result = await _userManager.CreateAsync(user, dto.Password);
 
 //            if (!result.Succeeded)
@@ -113,28 +125,19 @@
 //                var firstError = result.Errors.FirstOrDefault()?.Description
 //                                 ?? "Something went wrong. Please try again.";
 
-//                return BadRequest(new
-//                {
-//                    message = firstError
-//                });
+//                return BadRequest(new { message = firstError });
 //            }
 
-//            // ✅ Ensure role exists
 //            if (!await _roleManager.RoleExistsAsync("User"))
 //            {
 //                await _roleManager.CreateAsync(new IdentityRole("User"));
 //            }
 
-//            // Assign role
 //            await _userManager.AddToRoleAsync(user, "User");
 
-//            // ================================
-//            // 🔥 EMAIL VERIFICATION (NEW)
-//            // ================================
 //            var emailToken = await _userManager.GenerateEmailConfirmationTokenAsync(user);
 
 //            var frontendBaseUrl = _config["ClientApp:BaseUrl"];
-
 //            var verificationLink =
 //                $"{frontendBaseUrl.TrimEnd('/')}/verify-email" +
 //                $"?email={Uri.EscapeDataString(user.Email!)}" +
@@ -142,34 +145,16 @@
 
 //            var subject = "Verify your email - LeadFlow AI";
 //            var body = $@"
-//        <h2>Welcome to LeadFlow AI</h2>
-//        <p>Please verify your email by clicking below:</p>
-//        <a href='{verificationLink}'>Verify Email</a>
-//        <br/><br/>
-//        <p>If you didn't create this account, ignore this email.</p>";
+//                <h2>Welcome to LeadFlow AI</h2>
+//                <p>Please verify your email by clicking below:</p>
+//                <a href='{verificationLink}'>Verify Email</a>
+//                <br/><br/>
+//                <p>If you didn't create this account, ignore this email.</p>";
 
 //            await _emailService.SendEmailAsync(user.Email!, subject, body);
 
-//            // ================================
-//            // 🔐 JWT + REFRESH TOKEN (UNCHANGED)
-//            // ================================
-//            var token = await _tokenService.GenerateJwtTokenAsync(user);
-//            var refreshToken = await _tokenService.GenerateRefreshTokenAsync();
+//            var authResponse = await BuildAuthResponseAsync(user, false);
 
-//            var userRefresh = new UserRefreshToken
-//            {
-//                UserId = user.Id,
-//                Token = refreshToken,
-//                ExpiresAt = DateTime.UtcNow.AddDays(7),
-//                CreatedAt = DateTime.UtcNow
-//            };
-
-//            _context.UserRefreshTokens.Add(userRefresh);
-//            await _context.SaveChangesAsync();
-
-//            // ================================
-//            // 🧪 DEV SUPPORT (OPTIONAL)
-//            // ================================
 //            var returnTokenInDev =
 //                bool.TryParse(_config["EmailConfirmation:ReturnTokenInDevelopment"], out var flag) && flag;
 
@@ -177,20 +162,17 @@
 //            {
 //                return Ok(new
 //                {
-//                    token,
-//                    refreshToken,
+//                    token = authResponse.Token,
+//                    refreshToken = authResponse.RefreshToken,
 //                    verificationToken = emailToken,
 //                    verificationLink
 //                });
 //            }
 
-//            // ================================
-//            // ✅ FINAL RESPONSE
-//            // ================================
 //            return Ok(new
 //            {
-//                token,
-//                refreshToken,
+//                token = authResponse.Token,
+//                refreshToken = authResponse.RefreshToken,
 //                message = "Registration successful. Please verify your email."
 //            });
 //        }
@@ -200,13 +182,11 @@
 //        {
 //            var user = await _userManager.FindByEmailAsync(dto.Email);
 
-//            // ❌ Invalid email OR password
 //            if (user == null || !(await _userManager.CheckPasswordAsync(user, dto.Password)))
 //            {
 //                return Unauthorized(new { message = "Invalid credentials" });
 //            }
 
-//            // 🚨 EMAIL NOT VERIFIED (PUT HERE)
 //            if (!user.EmailConfirmed)
 //            {
 //                return BadRequest(new
@@ -245,10 +225,8 @@
 //                return Unauthorized(new { message = "Google account information is incomplete." });
 //            }
 
-//            // 1) Try by external login first
 //            var user = await _userManager.FindByLoginAsync("Google", payload.Subject);
 
-//            // 2) If not found, try by email
 //            if (user == null)
 //            {
 //                user = await _userManager.FindByEmailAsync(payload.Email);
@@ -256,7 +234,6 @@
 
 //            var isNewUser = false;
 
-//            // 3) Create new local Identity user if none exists
 //            if (user == null)
 //            {
 //                user = new ApplicationUser
@@ -284,13 +261,10 @@
 //                }
 
 //                isNewUser = true;
-
 //                await _userManager.AddToRoleAsync(user, "User");
 //            }
 //            else
 //            {
-//                // If the user already exists locally and Google says email is verified,
-//                // ensure local EmailConfirmed is true.
 //                if (!user.EmailConfirmed && payload.EmailVerified)
 //                {
 //                    user.EmailConfirmed = true;
@@ -298,7 +272,6 @@
 //                }
 //            }
 
-//            // 4) Link Google login if not already linked
 //            var existingLogins = await _userManager.GetLoginsAsync(user);
 //            var alreadyLinked = existingLogins.Any(x =>
 //                x.LoginProvider == "Google" && x.ProviderKey == payload.Subject);
@@ -319,7 +292,6 @@
 //                }
 //            }
 
-//            // 5) Return same auth response shape as normal login
 //            var authResponse = await BuildAuthResponseAsync(user, isNewUser);
 //            return Ok(authResponse);
 //        }
@@ -328,11 +300,11 @@
 //        [HttpPost("refresh")]
 //        public async Task<IActionResult> Refresh([FromBody] TokenRefreshDto dto)
 //        {
-//            if (string.IsNullOrEmpty(dto.RefreshToken))
+//            if (string.IsNullOrWhiteSpace(dto.RefreshToken))
 //                return BadRequest(new { message = "Refresh token is required" });
 
 //            var storedRefresh = await _context.UserRefreshTokens
-//                 .FirstOrDefaultAsync(r => r.Token == dto.RefreshToken);
+//                .FirstOrDefaultAsync(r => r.Token == dto.RefreshToken);
 
 //            if (storedRefresh == null)
 //                return Unauthorized(new { message = "Invalid refresh token" });
@@ -344,24 +316,53 @@
 //            if (user == null)
 //                return Unauthorized(new { message = "User not found" });
 
-//            // 🔄 Generate new tokens
 //            var newJwt = await _tokenService.GenerateJwtTokenAsync(user);
 //            var newRefreshToken = await _tokenService.GenerateRefreshTokenAsync();
 
-//            // Revoke old one and add new record
 //            storedRefresh.RevokedAt = DateTime.UtcNow;
+
 //            var newRecord = new UserRefreshToken
 //            {
 //                UserId = user.Id,
 //                Token = newRefreshToken,
-//                ExpiresAt = DateTime.UtcNow.AddDays(7),
+//                ExpiresAt = DateTime.UtcNow.AddDays(_tokenService.GetRefreshTokenDays()),
 //                CreatedAt = DateTime.UtcNow
 //            };
 
 //            _context.UserRefreshTokens.Add(newRecord);
 //            await _context.SaveChangesAsync();
 
-//            return Ok(new { token = newJwt, refreshToken = newRefreshToken });
+//            return Ok(new AuthResponseDto
+//            {
+//                Token = newJwt,
+//                RefreshToken = newRefreshToken,
+//                IsNewUser = false,
+//                User = new AuthUserDto
+//                {
+//                    Id = user.Id,
+//                    Email = user.Email,
+//                    UserName = user.UserName
+//                }
+//            });
+//        }
+
+//        [Authorize]
+//        [HttpPost("logout")]
+//        public async Task<IActionResult> Logout([FromBody] TokenRefreshDto dto)
+//        {
+//            if (string.IsNullOrWhiteSpace(dto.RefreshToken))
+//                return Ok(new { message = "Logged out." });
+
+//            var storedRefresh = await _context.UserRefreshTokens
+//                .FirstOrDefaultAsync(r => r.Token == dto.RefreshToken);
+
+//            if (storedRefresh != null && storedRefresh.RevokedAt == null)
+//            {
+//                storedRefresh.RevokedAt = DateTime.UtcNow;
+//                await _context.SaveChangesAsync();
+//            }
+
+//            return Ok(new { message = "Logged out." });
 //        }
 
 //        [AllowAnonymous]
@@ -380,10 +381,7 @@
 
 //            if (user == null)
 //            {
-//                return Ok(new
-//                {
-//                    message = genericMessage
-//                });
+//                return Ok(new { message = genericMessage });
 //            }
 
 //            var token = await _userManager.GeneratePasswordResetTokenAsync(user);
@@ -404,20 +402,20 @@
 
 //            var subject = "Reset your password";
 //            var body = $@"
-//                        <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #111827;'>
-//                            <h2 style='margin-bottom: 16px;'>Reset your password</h2>
-//                            <p>We received a request to reset your password.</p>
-//                            <p>Click the button below to set a new password:</p>
-//                            <p style='margin: 24px 0;'>
-//                                <a href='{resetLink}'
-//                                   style='background-color:#2563eb;color:white;padding:12px 20px;text-decoration:none;border-radius:8px;display:inline-block;'>
-//                                   Reset Password
-//                                </a>
-//                            </p>
-//                            <p>If the button does not work, copy and paste this link into your browser:</p>
-//                            <p><a href='{resetLink}'>{resetLink}</a></p>
-//                            <p>If you did not request this, you can safely ignore this email.</p>
-//                        </div>";
+//                <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #111827;'>
+//                    <h2 style='margin-bottom: 16px;'>Reset your password</h2>
+//                    <p>We received a request to reset your password.</p>
+//                    <p>Click the button below to set a new password:</p>
+//                    <p style='margin: 24px 0;'>
+//                        <a href='{resetLink}'
+//                           style='background-color:#2563eb;color:white;padding:12px 20px;text-decoration:none;border-radius:8px;display:inline-block;'>
+//                           Reset Password
+//                        </a>
+//                    </p>
+//                    <p>If the button does not work, copy and paste this link into your browser:</p>
+//                    <p><a href='{resetLink}'>{resetLink}</a></p>
+//                    <p>If you did not request this, you can safely ignore this email.</p>
+//                </div>";
 
 //            await _emailService.SendEmailAsync(email, subject, body);
 
@@ -434,10 +432,7 @@
 //                });
 //            }
 
-//            return Ok(new
-//            {
-//                message = genericMessage
-//            });
+//            return Ok(new { message = genericMessage });
 //        }
 
 //        [AllowAnonymous]
@@ -462,10 +457,7 @@
 
 //            if (user == null)
 //            {
-//                return BadRequest(new
-//                {
-//                    message = "Invalid reset request."
-//                });
+//                return BadRequest(new { message = "Invalid reset request." });
 //            }
 
 //            var result = await _userManager.ResetPasswordAsync(user, dto.Token, dto.NewPassword);
@@ -489,10 +481,7 @@
 
 //            await _context.SaveChangesAsync();
 
-//            return Ok(new
-//            {
-//                message = "Password has been reset successfully."
-//            });
+//            return Ok(new { message = "Password has been reset successfully." });
 //        }
 
 //        private async Task<(string token, string link)> GenerateEmailConfirmationLinkAsync(ApplicationUser user)
@@ -519,20 +508,20 @@
 
 //            var subject = "Verify your email address";
 //            var body = $@"
-//                        <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #111827;'>
-//                            <h2 style='margin-bottom: 16px;'>Verify your email</h2>
-//                            <p>Thanks for creating your account.</p>
-//                            <p>Click the button below to verify your email address:</p>
-//                            <p style='margin: 24px 0;'>
-//                                <a href='{verificationLink}'
-//                                   style='background-color:#2563eb;color:white;padding:12px 20px;text-decoration:none;border-radius:8px;display:inline-block;'>
-//                                   Verify Email
-//                                </a>
-//                            </p>
-//                            <p>If the button does not work, copy and paste this link into your browser:</p>
-//                            <p><a href='{verificationLink}'>{verificationLink}</a></p>
-//                            <p>If you did not create this account, you can safely ignore this email.</p>
-//                        </div>";
+//                <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #111827;'>
+//                    <h2 style='margin-bottom: 16px;'>Verify your email</h2>
+//                    <p>Thanks for creating your account.</p>
+//                    <p>Click the button below to verify your email address:</p>
+//                    <p style='margin: 24px 0;'>
+//                        <a href='{verificationLink}'
+//                           style='background-color:#2563eb;color:white;padding:12px 20px;text-decoration:none;border-radius:8px;display:inline-block;'>
+//                           Verify Email
+//                        </a>
+//                    </p>
+//                    <p>If the button does not work, copy and paste this link into your browser:</p>
+//                    <p><a href='{verificationLink}'>{verificationLink}</a></p>
+//                    <p>If you did not create this account, you can safely ignore this email.</p>
+//                </div>";
 
 //            await _emailService.SendEmailAsync(user.Email!, subject, body);
 //        }
@@ -551,18 +540,12 @@
 
 //            if (user == null)
 //            {
-//                return BadRequest(new
-//                {
-//                    message = "Invalid verification request."
-//                });
+//                return BadRequest(new { message = "Invalid verification request." });
 //            }
 
 //            if (user.EmailConfirmed)
 //            {
-//                return Ok(new
-//                {
-//                    message = "Email is already verified."
-//                });
+//                return Ok(new { message = "Email is already verified." });
 //            }
 
 //            var result = await _userManager.ConfirmEmailAsync(user, dto.Token);
@@ -576,10 +559,7 @@
 //                });
 //            }
 
-//            return Ok(new
-//            {
-//                message = "Email verified successfully."
-//            });
+//            return Ok(new { message = "Email verified successfully." });
 //        }
 
 //        [AllowAnonymous]
@@ -598,18 +578,12 @@
 
 //            if (user == null)
 //            {
-//                return Ok(new
-//                {
-//                    message = genericMessage
-//                });
+//                return Ok(new { message = genericMessage });
 //            }
 
 //            if (user.EmailConfirmed)
 //            {
-//                return Ok(new
-//                {
-//                    message = "Email is already verified."
-//                });
+//                return Ok(new { message = "Email is already verified." });
 //            }
 
 //            await SendVerificationEmailAsync(user);
@@ -629,21 +603,16 @@
 //                });
 //            }
 
-//            return Ok(new
-//            {
-//                message = genericMessage
-//            });
+//            return Ok(new { message = genericMessage });
 //        }
 
-//        // ✅ GET /auth/me
+//        [Authorize]
 //        [HttpGet("me")]
 //        public IActionResult Me()
 //        {
-//            // Extract user data from JWT claims
 //            var email = User.FindFirst(ClaimTypes.Email)?.Value;
 //            var name = User.Identity?.Name ?? "Unknown";
-//            var idClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-//            var id = idClaim != null ? int.Parse(idClaim) : 0;
+//            var id = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
 
 //            return Ok(new
 //            {
@@ -696,6 +665,7 @@ namespace SaaSForge.Api.Controllers
         private readonly IEmailService _emailService;
         private readonly IWebHostEnvironment _env;
         private readonly GoogleTokenValidatorService _googleTokenValidatorService;
+        private readonly ILogger<AuthController> _logger;
 
         public AuthController(
             UserManager<ApplicationUser> userManager,
@@ -705,7 +675,8 @@ namespace SaaSForge.Api.Controllers
             AppDbContext context,
             IEmailService emailService,
             IWebHostEnvironment env,
-            GoogleTokenValidatorService googleTokenValidatorService)
+            GoogleTokenValidatorService googleTokenValidatorService,
+            ILogger<AuthController> logger)
         {
             _userManager = userManager;
             _roleManager = roleManager;
@@ -715,6 +686,7 @@ namespace SaaSForge.Api.Controllers
             _emailService = emailService;
             _env = env;
             _googleTokenValidatorService = googleTokenValidatorService;
+            _logger = logger;
         }
 
         private async Task RevokeActiveRefreshTokensAsync(string userId)
@@ -810,20 +782,38 @@ namespace SaaSForge.Api.Controllers
             var emailToken = await _userManager.GenerateEmailConfirmationTokenAsync(user);
 
             var frontendBaseUrl = _config["ClientApp:BaseUrl"];
+            if (string.IsNullOrWhiteSpace(frontendBaseUrl))
+            {
+                _logger.LogError("ClientApp:BaseUrl is not configured during registration for user {UserId}", user.Id);
+
+                var authResponseNoEmail = await BuildAuthResponseAsync(user, false);
+
+                return Ok(new
+                {
+                    token = authResponseNoEmail.Token,
+                    refreshToken = authResponseNoEmail.RefreshToken,
+                    message = "Registration successful. Verification email could not be sent right now."
+                });
+            }
+
             var verificationLink =
                 $"{frontendBaseUrl.TrimEnd('/')}/verify-email" +
                 $"?email={Uri.EscapeDataString(user.Email!)}" +
                 $"&token={Uri.EscapeDataString(emailToken)}";
 
-            var subject = "Verify your email - LeadFlow AI";
-            var body = $@"
-                <h2>Welcome to LeadFlow AI</h2>
-                <p>Please verify your email by clicking below:</p>
-                <a href='{verificationLink}'>Verify Email</a>
-                <br/><br/>
-                <p>If you didn't create this account, ignore this email.</p>";
+            var emailSent = false;
 
-            await _emailService.SendEmailAsync(user.Email!, subject, body);
+            try
+            {
+                emailSent = await _emailService.SendEmailVerificationAsync(
+                    user.Email!,
+                    user.FullName ?? user.Email!,
+                    verificationLink);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Verification email sending failed during registration for user {UserId}", user.Id);
+            }
 
             var authResponse = await BuildAuthResponseAsync(user, false);
 
@@ -837,7 +827,10 @@ namespace SaaSForge.Api.Controllers
                     token = authResponse.Token,
                     refreshToken = authResponse.RefreshToken,
                     verificationToken = emailToken,
-                    verificationLink
+                    verificationLink,
+                    message = emailSent
+                        ? "Registration successful. Please verify your email."
+                        : "Registration successful. Verification email could not be sent right now."
                 });
             }
 
@@ -845,7 +838,9 @@ namespace SaaSForge.Api.Controllers
             {
                 token = authResponse.Token,
                 refreshToken = authResponse.RefreshToken,
-                message = "Registration successful. Please verify your email."
+                message = emailSent
+                    ? "Registration successful. Please verify your email."
+                    : "Registration successful. Verification email could not be sent right now."
             });
         }
 
@@ -1061,10 +1056,8 @@ namespace SaaSForge.Api.Controllers
             var frontendBaseUrl = _config["ClientApp:BaseUrl"];
             if (string.IsNullOrWhiteSpace(frontendBaseUrl))
             {
-                return StatusCode(500, new
-                {
-                    message = "Client application base URL is not configured."
-                });
+                _logger.LogError("ClientApp:BaseUrl is not configured for forgot password request for user {UserId}", user.Id);
+                return Ok(new { message = genericMessage });
             }
 
             var resetLink =
@@ -1072,24 +1065,17 @@ namespace SaaSForge.Api.Controllers
                 $"?email={Uri.EscapeDataString(email)}" +
                 $"&token={Uri.EscapeDataString(token)}";
 
-            var subject = "Reset your password";
-            var body = $@"
-                <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #111827;'>
-                    <h2 style='margin-bottom: 16px;'>Reset your password</h2>
-                    <p>We received a request to reset your password.</p>
-                    <p>Click the button below to set a new password:</p>
-                    <p style='margin: 24px 0;'>
-                        <a href='{resetLink}'
-                           style='background-color:#2563eb;color:white;padding:12px 20px;text-decoration:none;border-radius:8px;display:inline-block;'>
-                           Reset Password
-                        </a>
-                    </p>
-                    <p>If the button does not work, copy and paste this link into your browser:</p>
-                    <p><a href='{resetLink}'>{resetLink}</a></p>
-                    <p>If you did not request this, you can safely ignore this email.</p>
-                </div>";
-
-            await _emailService.SendEmailAsync(email, subject, body);
+            try
+            {
+                await _emailService.SendPasswordResetAsync(
+                    email,
+                    user.FullName ?? user.Email ?? email,
+                    resetLink);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Password reset email sending failed for user {UserId}", user.Id);
+            }
 
             var returnTokenInDevelopment =
                 bool.TryParse(_config["PasswordReset:ReturnTokenInDevelopment"], out var flag) && flag;
@@ -1174,28 +1160,22 @@ namespace SaaSForge.Api.Controllers
             return (token, link);
         }
 
-        private async Task SendVerificationEmailAsync(ApplicationUser user)
+        private async Task<bool> SendVerificationEmailAsync(ApplicationUser user)
         {
             var (_, verificationLink) = await GenerateEmailConfirmationLinkAsync(user);
 
-            var subject = "Verify your email address";
-            var body = $@"
-                <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #111827;'>
-                    <h2 style='margin-bottom: 16px;'>Verify your email</h2>
-                    <p>Thanks for creating your account.</p>
-                    <p>Click the button below to verify your email address:</p>
-                    <p style='margin: 24px 0;'>
-                        <a href='{verificationLink}'
-                           style='background-color:#2563eb;color:white;padding:12px 20px;text-decoration:none;border-radius:8px;display:inline-block;'>
-                           Verify Email
-                        </a>
-                    </p>
-                    <p>If the button does not work, copy and paste this link into your browser:</p>
-                    <p><a href='{verificationLink}'>{verificationLink}</a></p>
-                    <p>If you did not create this account, you can safely ignore this email.</p>
-                </div>";
-
-            await _emailService.SendEmailAsync(user.Email!, subject, body);
+            try
+            {
+                return await _emailService.SendEmailVerificationAsync(
+                    user.Email!,
+                    user.FullName ?? user.Email!,
+                    verificationLink);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Verification email sending failed for user {UserId}", user.Id);
+                return false;
+            }
         }
 
         [AllowAnonymous]
@@ -1258,7 +1238,14 @@ namespace SaaSForge.Api.Controllers
                 return Ok(new { message = "Email is already verified." });
             }
 
-            await SendVerificationEmailAsync(user);
+            try
+            {
+                await SendVerificationEmailAsync(user);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Resend verification email failed for user {UserId}", user.Id);
+            }
 
             var returnTokenInDevelopment =
                 bool.TryParse(_config["EmailConfirmation:ReturnTokenInDevelopment"], out var flag) && flag;

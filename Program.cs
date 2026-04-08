@@ -169,6 +169,17 @@ builder.Services.AddHttpClient<IOpenAiService, OpenAiService>(client =>
     client.DefaultRequestHeaders.Add("Authorization", $"Bearer {builder.Configuration["OpenAI:ApiKey"]}");
 });
 
+builder.Services.Configure<ResendSettings>(
+    builder.Configuration.GetSection("Resend"));
+
+builder.Services.AddHttpClient<IEmailService, EmailService>(client =>
+{
+    client.BaseAddress = new Uri("https://api.resend.com/");
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestHeaders.Accept.Add(
+        new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+});
+
 // ✅ Bind ExpoPush from appsettings.json using ONE options class (Configurations)
 builder.Services.Configure<ExpoPushOptions>(
     builder.Configuration.GetSection("ExpoPush")
