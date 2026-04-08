@@ -96,17 +96,18 @@ builder.Services.AddAuthentication(options =>
 //        .AllowCredentials()
 //        .SetIsOriginAllowed(_ => true));   // TEMPORARY FOR DEV
 //});
+var allowedOrigins = new[]
+{
+    "http://localhost:3000",
+    "https://leadflow-ai-nine.vercel.app"
+};
 
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
         policy
-            .SetIsOriginAllowed(origin =>
-            {
-                return origin == "http://localhost:3000"
-                    || origin == "https://leadflow-ai-nine.vercel.app";
-            })
+            .WithOrigins(allowedOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
@@ -334,6 +335,29 @@ app.UseSwaggerUI(c =>
 });
 
 app.UseForwardedHeaders();
+
+app.Use(async (context, next) =>
+{
+    var origin = context.Request.Headers["Origin"].ToString();
+
+    if (!string.IsNullOrWhiteSpace(origin) &&
+        allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase))
+    {
+        context.Response.Headers["Access-Control-Allow-Origin"] = origin;
+        context.Response.Headers["Vary"] = "Origin";
+        context.Response.Headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With";
+        context.Response.Headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS";
+    }
+
+    if (HttpMethods.IsOptions(context.Request.Method))
+    {
+        context.Response.StatusCode = StatusCodes.Status204NoContent;
+        return;
+    }
+
+    await next();
+});
+
 //app.UseHttpsRedirection();
 
 app.UseRouting();
