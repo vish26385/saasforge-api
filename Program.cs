@@ -332,7 +332,7 @@ app.UseSwaggerUI(c =>
 });
 
 app.UseForwardedHeaders();
-app.UseHttpsRedirection();
+//app.UseHttpsRedirection();
 
 app.UseRouting();
 //app.UseCors("AllowAll");   // between UseRouting and Auth
