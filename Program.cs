@@ -2,7 +2,6 @@
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using OpenAI; // ✅ Official SDK
@@ -107,8 +106,8 @@ builder.Services.AddCors(options =>
             "https://leadflow-ai-nine.vercel.app"         // production frontend
         )
         .AllowAnyHeader()
-        .AllowAnyMethod()
-        .AllowCredentials());
+        .AllowAnyMethod());
+        //.AllowCredentials());
 });
 
 // ---------------------------
@@ -213,6 +212,17 @@ builder.Services.AddSingleton(sp =>
 
 // You may also want IHttpClientFactory generally:
 builder.Services.AddHttpClient();
+
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders =
+        ForwardedHeaders.XForwardedFor |
+        ForwardedHeaders.XForwardedProto;
+
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 // ---------------------------
 // 9) App Pipeline
@@ -321,6 +331,7 @@ app.UseSwaggerUI(c =>
     c.RoutePrefix = "swagger";
 });
 
+app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 
 app.UseRouting();
