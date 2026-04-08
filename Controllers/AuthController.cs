@@ -639,22 +639,24 @@
 //    }
 //}
 
-using SaaSForge.Api.Data;
-using SaaSForge.Api.DTOs;
-using SaaSForge.Api.Models.Auth;
+using Google.Apis.Auth;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Claims;
+using SaaSForge.Api.Data;
+using SaaSForge.Api.DTOs;
+using SaaSForge.Api.Models.Auth;
 using SaaSForge.Api.Services.Auth;
 using SaaSForge.Api.Services.Common;
-using Google.Apis.Auth;
+using System.Security.Claims;
 
 namespace SaaSForge.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [EnableCors("AllowFrontend")]
     public class AuthController : ControllerBase
     {
         private readonly UserManager<ApplicationUser> _userManager;
@@ -864,6 +866,13 @@ namespace SaaSForge.Api.Controllers
 
             var authResponse = await BuildAuthResponseAsync(user, false);
             return Ok(authResponse);
+        }
+
+        [AllowAnonymous]
+        [HttpOptions("google-login")]
+        public IActionResult GoogleLoginOptions()
+        {
+            return Ok();
         }
 
         [AllowAnonymous]

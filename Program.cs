@@ -99,15 +99,17 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowFrontend",
-        x => x
-        .WithOrigins(
-            "http://localhost:3000",              // local dev
-            "https://leadflow-ai-nine.vercel.app"         // production frontend
-        )
-        .AllowAnyHeader()
-        .AllowAnyMethod());
-        //.AllowCredentials());
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy
+            .SetIsOriginAllowed(origin =>
+            {
+                return origin == "http://localhost:3000"
+                    || origin == "https://leadflow-ai-nine.vercel.app";
+            })
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
 });
 
 // ---------------------------
@@ -335,8 +337,10 @@ app.UseForwardedHeaders();
 //app.UseHttpsRedirection();
 
 app.UseRouting();
+
 //app.UseCors("AllowAll");   // between UseRouting and Auth
 app.UseCors("AllowFrontend");   // between UseRouting and Auth
+
 app.UseAuthentication();
 app.UseAuthorization();
 
