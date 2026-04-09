@@ -1,19 +1,21 @@
-﻿//using SaaSForge.Api.Data;
-//using SaaSForge.Api.DTOs;
-//using SaaSForge.Api.Models.Auth;
+﻿//using Google.Apis.Auth;
 //using Microsoft.AspNetCore.Authorization;
+//using Microsoft.AspNetCore.Cors;
 //using Microsoft.AspNetCore.Identity;
 //using Microsoft.AspNetCore.Mvc;
 //using Microsoft.EntityFrameworkCore;
-//using System.Security.Claims;
+//using SaaSForge.Api.Data;
+//using SaaSForge.Api.DTOs;
+//using SaaSForge.Api.Models.Auth;
 //using SaaSForge.Api.Services.Auth;
 //using SaaSForge.Api.Services.Common;
-//using Google.Apis.Auth;
+//using System.Security.Claims;
 
 //namespace SaaSForge.Api.Controllers
 //{
 //    [ApiController]
 //    [Route("api/[controller]")]
+//    [EnableCors("AllowFrontend")]
 //    public class AuthController : ControllerBase
 //    {
 //        private readonly UserManager<ApplicationUser> _userManager;
@@ -24,6 +26,7 @@
 //        private readonly IEmailService _emailService;
 //        private readonly IWebHostEnvironment _env;
 //        private readonly GoogleTokenValidatorService _googleTokenValidatorService;
+//        private readonly ILogger<AuthController> _logger;
 
 //        public AuthController(
 //            UserManager<ApplicationUser> userManager,
@@ -33,7 +36,8 @@
 //            AppDbContext context,
 //            IEmailService emailService,
 //            IWebHostEnvironment env,
-//            GoogleTokenValidatorService googleTokenValidatorService)
+//            GoogleTokenValidatorService googleTokenValidatorService,
+//            ILogger<AuthController> logger)
 //        {
 //            _userManager = userManager;
 //            _roleManager = roleManager;
@@ -43,6 +47,7 @@
 //            _emailService = emailService;
 //            _env = env;
 //            _googleTokenValidatorService = googleTokenValidatorService;
+//            _logger = logger;
 //        }
 
 //        private async Task RevokeActiveRefreshTokensAsync(string userId)
@@ -138,20 +143,38 @@
 //            var emailToken = await _userManager.GenerateEmailConfirmationTokenAsync(user);
 
 //            var frontendBaseUrl = _config["ClientApp:BaseUrl"];
+//            if (string.IsNullOrWhiteSpace(frontendBaseUrl))
+//            {
+//                _logger.LogError("ClientApp:BaseUrl is not configured during registration for user {UserId}", user.Id);
+
+//                var authResponseNoEmail = await BuildAuthResponseAsync(user, false);
+
+//                return Ok(new
+//                {
+//                    token = authResponseNoEmail.Token,
+//                    refreshToken = authResponseNoEmail.RefreshToken,
+//                    message = "Registration successful. Verification email could not be sent right now."
+//                });
+//            }
+
 //            var verificationLink =
 //                $"{frontendBaseUrl.TrimEnd('/')}/verify-email" +
 //                $"?email={Uri.EscapeDataString(user.Email!)}" +
 //                $"&token={Uri.EscapeDataString(emailToken)}";
 
-//            var subject = "Verify your email - LeadFlow AI";
-//            var body = $@"
-//                <h2>Welcome to LeadFlow AI</h2>
-//                <p>Please verify your email by clicking below:</p>
-//                <a href='{verificationLink}'>Verify Email</a>
-//                <br/><br/>
-//                <p>If you didn't create this account, ignore this email.</p>";
+//            var emailSent = false;
 
-//            await _emailService.SendEmailAsync(user.Email!, subject, body);
+//            try
+//            {
+//                emailSent = await _emailService.SendEmailVerificationAsync(
+//                    user.Email!,
+//                    user.FullName ?? user.Email!,
+//                    verificationLink);
+//            }
+//            catch (Exception ex)
+//            {
+//                _logger.LogError(ex, "Verification email sending failed during registration for user {UserId}", user.Id);
+//            }
 
 //            var authResponse = await BuildAuthResponseAsync(user, false);
 
@@ -165,7 +188,10 @@
 //                    token = authResponse.Token,
 //                    refreshToken = authResponse.RefreshToken,
 //                    verificationToken = emailToken,
-//                    verificationLink
+//                    verificationLink,
+//                    message = emailSent
+//                        ? "Registration successful. Please verify your email."
+//                        : "Registration successful. Verification email could not be sent right now."
 //                });
 //            }
 
@@ -173,7 +199,9 @@
 //            {
 //                token = authResponse.Token,
 //                refreshToken = authResponse.RefreshToken,
-//                message = "Registration successful. Please verify your email."
+//                message = emailSent
+//                    ? "Registration successful. Please verify your email."
+//                    : "Registration successful. Verification email could not be sent right now."
 //            });
 //        }
 
@@ -197,6 +225,13 @@
 
 //            var authResponse = await BuildAuthResponseAsync(user, false);
 //            return Ok(authResponse);
+//        }
+
+//        [AllowAnonymous]
+//        [HttpOptions("google-login")]
+//        public IActionResult GoogleLoginOptions()
+//        {
+//            return Ok();
 //        }
 
 //        [AllowAnonymous]
@@ -389,10 +424,8 @@
 //            var frontendBaseUrl = _config["ClientApp:BaseUrl"];
 //            if (string.IsNullOrWhiteSpace(frontendBaseUrl))
 //            {
-//                return StatusCode(500, new
-//                {
-//                    message = "Client application base URL is not configured."
-//                });
+//                _logger.LogError("ClientApp:BaseUrl is not configured for forgot password request for user {UserId}", user.Id);
+//                return Ok(new { message = genericMessage });
 //            }
 
 //            var resetLink =
@@ -400,24 +433,17 @@
 //                $"?email={Uri.EscapeDataString(email)}" +
 //                $"&token={Uri.EscapeDataString(token)}";
 
-//            var subject = "Reset your password";
-//            var body = $@"
-//                <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #111827;'>
-//                    <h2 style='margin-bottom: 16px;'>Reset your password</h2>
-//                    <p>We received a request to reset your password.</p>
-//                    <p>Click the button below to set a new password:</p>
-//                    <p style='margin: 24px 0;'>
-//                        <a href='{resetLink}'
-//                           style='background-color:#2563eb;color:white;padding:12px 20px;text-decoration:none;border-radius:8px;display:inline-block;'>
-//                           Reset Password
-//                        </a>
-//                    </p>
-//                    <p>If the button does not work, copy and paste this link into your browser:</p>
-//                    <p><a href='{resetLink}'>{resetLink}</a></p>
-//                    <p>If you did not request this, you can safely ignore this email.</p>
-//                </div>";
-
-//            await _emailService.SendEmailAsync(email, subject, body);
+//            try
+//            {
+//                await _emailService.SendPasswordResetAsync(
+//                    email,
+//                    user.FullName ?? user.Email ?? email,
+//                    resetLink);
+//            }
+//            catch (Exception ex)
+//            {
+//                _logger.LogError(ex, "Password reset email sending failed for user {UserId}", user.Id);
+//            }
 
 //            var returnTokenInDevelopment =
 //                bool.TryParse(_config["PasswordReset:ReturnTokenInDevelopment"], out var flag) && flag;
@@ -502,28 +528,22 @@
 //            return (token, link);
 //        }
 
-//        private async Task SendVerificationEmailAsync(ApplicationUser user)
+//        private async Task<bool> SendVerificationEmailAsync(ApplicationUser user)
 //        {
 //            var (_, verificationLink) = await GenerateEmailConfirmationLinkAsync(user);
 
-//            var subject = "Verify your email address";
-//            var body = $@"
-//                <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #111827;'>
-//                    <h2 style='margin-bottom: 16px;'>Verify your email</h2>
-//                    <p>Thanks for creating your account.</p>
-//                    <p>Click the button below to verify your email address:</p>
-//                    <p style='margin: 24px 0;'>
-//                        <a href='{verificationLink}'
-//                           style='background-color:#2563eb;color:white;padding:12px 20px;text-decoration:none;border-radius:8px;display:inline-block;'>
-//                           Verify Email
-//                        </a>
-//                    </p>
-//                    <p>If the button does not work, copy and paste this link into your browser:</p>
-//                    <p><a href='{verificationLink}'>{verificationLink}</a></p>
-//                    <p>If you did not create this account, you can safely ignore this email.</p>
-//                </div>";
-
-//            await _emailService.SendEmailAsync(user.Email!, subject, body);
+//            try
+//            {
+//                return await _emailService.SendEmailVerificationAsync(
+//                    user.Email!,
+//                    user.FullName ?? user.Email!,
+//                    verificationLink);
+//            }
+//            catch (Exception ex)
+//            {
+//                _logger.LogError(ex, "Verification email sending failed for user {UserId}", user.Id);
+//                return false;
+//            }
 //        }
 
 //        [AllowAnonymous]
@@ -586,7 +606,14 @@
 //                return Ok(new { message = "Email is already verified." });
 //            }
 
-//            await SendVerificationEmailAsync(user);
+//            try
+//            {
+//                await SendVerificationEmailAsync(user);
+//            }
+//            catch (Exception ex)
+//            {
+//                _logger.LogError(ex, "Resend verification email failed for user {UserId}", user.Id);
+//            }
 
 //            var returnTokenInDevelopment =
 //                bool.TryParse(_config["EmailConfirmation:ReturnTokenInDevelopment"], out var flag) && flag;
@@ -639,24 +666,22 @@
 //    }
 //}
 
-using Google.Apis.Auth;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Cors;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using SaaSForge.Api.Data;
 using SaaSForge.Api.DTOs;
 using SaaSForge.Api.Models.Auth;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 using SaaSForge.Api.Services.Auth;
 using SaaSForge.Api.Services.Common;
-using System.Security.Claims;
+using Google.Apis.Auth;
 
 namespace SaaSForge.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [EnableCors("AllowFrontend")]
     public class AuthController : ControllerBase
     {
         private readonly UserManager<ApplicationUser> _userManager;
@@ -866,13 +891,6 @@ namespace SaaSForge.Api.Controllers
 
             var authResponse = await BuildAuthResponseAsync(user, false);
             return Ok(authResponse);
-        }
-
-        [AllowAnonymous]
-        [HttpOptions("google-login")]
-        public IActionResult GoogleLoginOptions()
-        {
-            return Ok();
         }
 
         [AllowAnonymous]
