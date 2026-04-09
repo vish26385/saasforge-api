@@ -1,14 +1,10 @@
-﻿using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Options;
+﻿using Microsoft.Extensions.Options;
 using SaaSForge.Api.Configurations;
 using System.Net;
-using System.Net.Http;
 using System.Net.Mail;
-using System.Runtime;
 using System.Text;
 using System.Text.Json;
 using System.Net.Http.Headers;
-using System.Threading.Tasks;
 
 namespace SaaSForge.Api.Services.Common
 {
