@@ -213,14 +213,21 @@ namespace SaaSForge.Api.Services.Common
 
         public async Task<bool> SendEmailVerificationAsync(string toEmail, string userName, string verificationLink)
         {
-            var subject = "Verify your email - LeadFlow AI";
+            var subject = "Confirm your email to get started - LeadFlow AI";
 
             var html = _templateService.GetTemplate(
                 "EmailVerification.html",
                 verificationLink,
-                "Verify Email");
+                "Confirm Email");
 
-            return await SendAsync(toEmail, subject, html, "EmailVerification");
+            var text =
+                $"Hi {userName},\n\n" +
+                "Thanks for signing up to LeadFlow AI.\n\n" +
+                "Please confirm your email address to activate your account:\n" +
+                $"{verificationLink}\n\n" +
+                "If you did not create this account, you can ignore this email.";
+
+            return await SendAsync(toEmail, subject, html, text, "EmailVerification");
         }
 
         public async Task<bool> SendPasswordResetAsync(string toEmail, string userName, string resetLink)
@@ -232,31 +239,48 @@ namespace SaaSForge.Api.Services.Common
                 resetLink,
                 "Reset Password");
 
-            return await SendAsync(toEmail, subject, html, "PasswordReset");
+            var text =
+                $"Hi {userName},\n\n" +
+                "We received a request to reset your password.\n\n" +
+                $"Reset your password here:\n{resetLink}\n\n" +
+                "If you did not request this, you can safely ignore this email.";
+
+            return await SendAsync(toEmail, subject, html, text, "PasswordReset");
         }
 
         public async Task<bool> SendPasswordResetSuccessAsync(string toEmail, string userName, string loginUrl)
         {
-            var subject = "Password reset successful - LeadFlow AI";
+            var subject = "Your password was reset successfully - LeadFlow AI";
 
             var html = _templateService.GetTemplate(
                 "ResetPasswordSuccess.html",
                 loginUrl,
                 "Login Now");
 
-            return await SendAsync(toEmail, subject, html, "PasswordResetSuccess");
+            var text =
+                $"Hi {userName},\n\n" +
+                "Your password has been reset successfully.\n\n" +
+                $"Login here:\n{loginUrl}\n\n" +
+                "If this was not you, please contact support immediately.";
+
+            return await SendAsync(toEmail, subject, html, text, "PasswordResetSuccess");
         }
 
         public async Task<bool> SendWelcomeEmailAsync(string toEmail, string userName, string loginUrl)
         {
-            var subject = "Welcome to LeadFlow AI 🚀";
+            var subject = "You're all set - Welcome to LeadFlow AI";
 
             var html = _templateService.GetTemplate(
                 "Welcome.html",
                 loginUrl,
                 "Open Dashboard");
 
-            return await SendAsync(toEmail, subject, html, "WelcomeEmail");
+            var text =
+                $"Welcome to LeadFlow AI, {userName}.\n\n" +
+                "Your email has been verified successfully.\n\n" +
+                $"Open your account here:\n{loginUrl}";
+
+            return await SendAsync(toEmail, subject, html, text, "WelcomeEmail");
         }
 
         public async Task<bool> SendNotificationEmailAsync(
@@ -279,10 +303,20 @@ namespace SaaSForge.Api.Services.Common
                 actionText,
                 replacements);
 
-            return await SendAsync(toEmail, subject, html, "NotificationEmail");
+            var text =
+                $"{heading}\n\n" +
+                $"{message}\n\n" +
+                $"{actionUrl}";
+
+            return await SendAsync(toEmail, subject, html, text, "NotificationEmail");
         }
 
-        private async Task<bool> SendAsync(string toEmail, string subject, string html, string emailType)
+        private async Task<bool> SendAsync(
+            string toEmail,
+            string subject,
+            string html,
+            string text,
+            string emailType)
         {
             if (string.IsNullOrWhiteSpace(_settings.ApiKey))
             {
@@ -304,13 +338,9 @@ namespace SaaSForge.Api.Services.Common
                 return false;
             }
 
-            if (string.IsNullOrWhiteSpace(_settings.FromName))
-            {
-                _logger.LogWarning(
-                    "Resend FromName is missing or empty. EmailType: {EmailType}, To: {Email}",
-                    emailType,
-                    toEmail);
-            }
+            var fromName = string.IsNullOrWhiteSpace(_settings.FromName)
+                ? "LeadFlow AI Team"
+                : _settings.FromName;
 
             try
             {
@@ -327,14 +357,14 @@ namespace SaaSForge.Api.Services.Common
 
                 var payload = new
                 {
-                    from = $"{_settings.FromName} <{_settings.FromEmail}>",
+                    from = $"{fromName} <{_settings.FromEmail}>",
                     to = new[] { toEmail },
                     subject,
-                    html
+                    html,
+                    text
                 };
 
                 var json = JsonSerializer.Serialize(payload);
-
                 request.Content = new StringContent(json, Encoding.UTF8, "application/json");
 
                 using var response = await _httpClient.SendAsync(request);

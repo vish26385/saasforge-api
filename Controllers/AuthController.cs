@@ -1314,7 +1314,6 @@ namespace SaaSForge.Api.Controllers
                 });
             }
 
-            // ✅ SEND WELCOME EMAIL (AFTER SUCCESSFUL VERIFICATION)
             try
             {
                 var frontendBaseUrl = _config["ClientApp:BaseUrl"]?.TrimEnd('/');
@@ -1324,14 +1323,14 @@ namespace SaaSForge.Api.Controllers
                     await _emailService.SendWelcomeEmailAsync(
                         user.Email!,
                         user.FullName ?? user.Email!,
-                        $"{frontendBaseUrl}/login"
-                    );
+                        $"{frontendBaseUrl}/login");
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex,
-                    "Welcome email sending failed after email verification for user {UserId}",
+                _logger.LogError(
+                    ex,
+                    "Welcome email sending failed after email confirmation for user {UserId}",
                     user.Id);
             }
 
