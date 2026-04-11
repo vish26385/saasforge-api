@@ -842,6 +842,20 @@ namespace SaaSForge.Api.Controllers
                 _logger.LogError(ex, "Verification email sending failed during registration for user {UserId}", user.Id);
             }
 
+            var welcomeEmailSent = false;
+
+            try
+            {
+                welcomeEmailSent = await _emailService.SendWelcomeEmailAsync(
+                    user.Email!,
+                    user.FullName ?? user.Email!,
+                    $"{frontendBaseUrl.TrimEnd('/')}/login");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Welcome email sending failed during registration for user {UserId}", user.Id);
+            }
+
             var authResponse = await BuildAuthResponseAsync(user, false);
 
             var returnTokenInDev =
@@ -987,6 +1001,28 @@ namespace SaaSForge.Api.Controllers
             }
 
             var authResponse = await BuildAuthResponseAsync(user, isNewUser);
+
+            // 🔥 Send welcome email ONLY for new users (Google Sign-Up)
+            if (isNewUser)
+            {
+                try
+                {
+                    var frontendBaseUrl = _config["ClientApp:BaseUrl"];
+
+                    if (!string.IsNullOrWhiteSpace(frontendBaseUrl))
+                    {
+                        await _emailService.SendWelcomeEmailAsync(
+                            user.Email!,
+                            user.FullName ?? user.Email!,
+                            $"{frontendBaseUrl.TrimEnd('/')}/login");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Welcome email failed for Google signup user {UserId}", user.Id);
+                }
+            }
+
             return Ok(authResponse);
         }
 
@@ -1165,6 +1201,24 @@ namespace SaaSForge.Api.Controllers
             }
 
             await _context.SaveChangesAsync();
+
+            // 🔥 Send password reset success email
+            try
+            {
+                var frontendBaseUrl = _config["ClientApp:BaseUrl"];
+
+                if (!string.IsNullOrWhiteSpace(frontendBaseUrl))
+                {
+                    await _emailService.SendPasswordResetSuccessAsync(
+                        user.Email!,
+                        user.FullName ?? user.Email!,
+                        $"{frontendBaseUrl.TrimEnd('/')}/login");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Password reset success email failed for user {UserId}", user.Id);
+            }
 
             return Ok(new { message = "Password has been reset successfully." });
         }

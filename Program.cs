@@ -550,6 +550,7 @@ builder.Services.AddScoped<ILeadAiPromptBuilder, LeadAiPromptBuilder>();
 builder.Services.AddScoped<ILeadAiSuggestionService, LeadAiSuggestionService>();
 
 builder.Services.AddHostedService<LeadAlertsWorker>();
+builder.Services.AddScoped<EmailTemplateService>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddHttpClient<IOpenAiService, OpenAiService>(client =>

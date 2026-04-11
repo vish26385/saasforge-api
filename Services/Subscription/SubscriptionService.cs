@@ -1,7 +1,10 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using SaaSForge.Api.Data;
 using SaaSForge.Api.DTOs.Subscription;
 using SaaSForge.Api.Models;
+using SaaSForge.Api.Models.Auth;
+using SaaSForge.Api.Services.Common;
 using SaaSForge.Api.Services.Usage;
 
 namespace SaaSForge.Api.Services.Subscription
@@ -9,10 +12,23 @@ namespace SaaSForge.Api.Services.Subscription
     public class SubscriptionService : ISubscriptionService
     {
         private readonly AppDbContext _context;
+        private readonly UserManager<ApplicationUser> _userManager;
+        private readonly IEmailService _emailService;
+        private readonly IConfiguration _config;
+        private readonly ILogger<SubscriptionService> _logger;
 
-        public SubscriptionService(AppDbContext context)
+
+        public SubscriptionService(AppDbContext context,
+                                   UserManager<ApplicationUser> userManager,
+                                   IEmailService emailService,
+                                   IConfiguration config,
+                                   ILogger<SubscriptionService> logger)
         {
             _context = context;
+            _userManager = userManager;
+            _emailService = emailService;
+            _config = config;
+            _logger = logger;
         }
 
         public async Task<SubscriptionResponseDto> GetMySubscriptionAsync(string ownerUserId)
@@ -67,7 +83,108 @@ namespace SaaSForge.Api.Services.Subscription
 
             return subscription;
         }
-        
+
+        //public async Task<ChangePlanResultDto> ChangePlanAsync(string ownerUserId, string planCode)
+        //{
+        //    if (string.IsNullOrWhiteSpace(planCode))
+        //    {
+        //        throw new InvalidOperationException("Plan code is required.");
+        //    }
+
+        //    var normalizedPlanCode = planCode.Trim().ToLowerInvariant();
+
+        //    var business = await _context.Businesses
+        //        .AsNoTracking()
+        //        .FirstOrDefaultAsync(x => x.OwnerUserId == ownerUserId);
+
+        //    if (business == null)
+        //    {
+        //        throw new InvalidOperationException("Business not found for the current user.");
+        //    }
+
+        //    var plan = await _context.SubscriptionPlans
+        //        .AsNoTracking()
+        //        .FirstOrDefaultAsync(x => x.Code == normalizedPlanCode && x.IsActive);
+
+        //    if (plan == null)
+        //    {
+        //        throw new InvalidOperationException("Requested plan does not exist or is inactive.");
+        //    }
+
+        //    var subscription = await GetOrCreateSubscriptionAsync(business.Id);
+        //    var currentPlanCode = (subscription.PlanCode ?? string.Empty).Trim().ToLowerInvariant();
+
+        //    // Idempotent no-op
+        //    if (string.Equals(currentPlanCode, normalizedPlanCode, StringComparison.OrdinalIgnoreCase))
+        //    {
+        //        var message = normalizedPlanCode == "pro"
+        //            ? "You are already on the Pro plan"
+        //            : $"You are already on the {plan.Name} plan";
+
+        //        return new ChangePlanResultDto
+        //        {
+        //            Changed = false,
+        //            Message = message,
+        //            Subscription = MapToDto(subscription)
+        //        };
+        //    }
+
+        //    var nowUtc = DateTime.UtcNow;
+
+        //    await using var transaction = await _context.Database.BeginTransactionAsync();
+
+        //    subscription.PlanCode = plan.Code;
+        //    subscription.Status = "active";
+
+        //    // Only set subscription dates when there is an actual billing-cycle reason.
+        //    // free -> pro is a real paid upgrade event, so dates are set once here.
+        //    if (string.Equals(currentPlanCode, "free", StringComparison.OrdinalIgnoreCase) &&
+        //        string.Equals(normalizedPlanCode, "pro", StringComparison.OrdinalIgnoreCase))
+        //    {
+        //        subscription.StartDateUtc = nowUtc;
+        //        subscription.EndDateUtc = nowUtc.AddMonths(1);
+        //    }
+        //    else if (string.Equals(normalizedPlanCode, "free", StringComparison.OrdinalIgnoreCase))
+        //    {
+        //        subscription.EndDateUtc = null;
+        //    }
+
+        //    subscription.UpdatedAtUtc = nowUtc;
+
+        //    var usage = await _context.BusinessUsages
+        //        .FirstOrDefaultAsync(x => x.BusinessId == business.Id);
+
+        //    if (usage != null)
+        //    {
+        //        usage.PlanCode = plan.Code;
+
+        //        // Preserve AiRequestsUsed — do NOT reset to 0
+        //        usage.AiRequestLimit = plan.MonthlyAiRequestLimit;
+
+        //        // If this is the actual free -> pro upgrade, align usage cycle to the new paid cycle
+        //        // but keep the already used count.
+        //        if (string.Equals(currentPlanCode, "free", StringComparison.OrdinalIgnoreCase) &&
+        //            string.Equals(normalizedPlanCode, "pro", StringComparison.OrdinalIgnoreCase))
+        //        {
+        //            usage.CurrentPeriodStartUtc = subscription.StartDateUtc;
+        //        }
+
+        //        usage.LastUpdatedAtUtc = nowUtc;
+        //    }
+
+        //    await _context.SaveChangesAsync();
+        //    await transaction.CommitAsync();
+
+        //    return new ChangePlanResultDto
+        //    {
+        //        Changed = true,
+        //        Message = string.Equals(normalizedPlanCode, "pro", StringComparison.OrdinalIgnoreCase)
+        //            ? "Plan upgraded to Pro successfully."
+        //            : $"Plan changed to {plan.Name} successfully.",
+        //        Subscription = MapToDto(subscription)
+        //    };
+        //}
+
         public async Task<ChangePlanResultDto> ChangePlanAsync(string ownerUserId, string planCode)
         {
             if (string.IsNullOrWhiteSpace(planCode))
@@ -114,6 +231,9 @@ namespace SaaSForge.Api.Services.Subscription
             }
 
             var nowUtc = DateTime.UtcNow;
+            var isFreeToProUpgrade =
+                string.Equals(currentPlanCode, "free", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(normalizedPlanCode, "pro", StringComparison.OrdinalIgnoreCase);
 
             await using var transaction = await _context.Database.BeginTransactionAsync();
 
@@ -122,8 +242,7 @@ namespace SaaSForge.Api.Services.Subscription
 
             // Only set subscription dates when there is an actual billing-cycle reason.
             // free -> pro is a real paid upgrade event, so dates are set once here.
-            if (string.Equals(currentPlanCode, "free", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(normalizedPlanCode, "pro", StringComparison.OrdinalIgnoreCase))
+            if (isFreeToProUpgrade)
             {
                 subscription.StartDateUtc = nowUtc;
                 subscription.EndDateUtc = nowUtc.AddMonths(1);
@@ -147,8 +266,7 @@ namespace SaaSForge.Api.Services.Subscription
 
                 // If this is the actual free -> pro upgrade, align usage cycle to the new paid cycle
                 // but keep the already used count.
-                if (string.Equals(currentPlanCode, "free", StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(normalizedPlanCode, "pro", StringComparison.OrdinalIgnoreCase))
+                if (isFreeToProUpgrade)
                 {
                     usage.CurrentPeriodStartUtc = subscription.StartDateUtc;
                 }
@@ -158,6 +276,37 @@ namespace SaaSForge.Api.Services.Subscription
 
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
+
+            // 🔥 Send plan activation notification email only after successful commit
+            if (string.Equals(normalizedPlanCode, "pro", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var user = await _userManager.FindByIdAsync(ownerUserId);
+
+                    if (user != null && !string.IsNullOrWhiteSpace(user.Email))
+                    {
+                        var frontendBaseUrl = _config["ClientApp:BaseUrl"];
+
+                        if (!string.IsNullOrWhiteSpace(frontendBaseUrl))
+                        {
+                            await _emailService.SendNotificationEmailAsync(
+                                user.Email,
+                                "Your Pro plan is now active - LeadFlow AI",
+                                "Your Pro plan is active",
+                                "Your subscription has been activated successfully. You can now access your upgraded LeadFlow AI features.",
+                                $"{frontendBaseUrl.TrimEnd('/')}/billing",
+                                "Open Billing");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "Failed to send subscription activation email for ownerUserId {OwnerUserId}",
+                        ownerUserId);
+                }
+            }
 
             return new ChangePlanResultDto
             {
