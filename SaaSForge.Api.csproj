@@ -33,4 +33,11 @@
     <Folder Include="Helpers\" />
   </ItemGroup>
 
+  <ItemGroup>
+  	<Content Include="EmailTemplates\**\*.*">
+  		<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+  		<CopyToPublishDirectory>Always</CopyToPublishDirectory>
+  	</Content>
+  </ItemGroup>
+
 </Project>
