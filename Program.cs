@@ -476,7 +476,7 @@ builder.Services.AddAuthentication(options =>
 var allowedOrigins = new[]
 {
     "http://localhost:3000",
-    "https://leadflow-ai-nine.vercel.app"
+    "https://leadflow.vishnexa.com"
 };
 
 builder.Services.AddCors(options =>
