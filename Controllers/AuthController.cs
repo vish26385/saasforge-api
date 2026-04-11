@@ -840,21 +840,7 @@ namespace SaaSForge.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Verification email sending failed during registration for user {UserId}", user.Id);
-            }
-
-            var welcomeEmailSent = false;
-
-            try
-            {
-                welcomeEmailSent = await _emailService.SendWelcomeEmailAsync(
-                    user.Email!,
-                    user.FullName ?? user.Email!,
-                    $"{frontendBaseUrl.TrimEnd('/')}/login");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Welcome email sending failed during registration for user {UserId}", user.Id);
-            }
+            }            
 
             var authResponse = await BuildAuthResponseAsync(user, false);
 
@@ -1259,6 +1245,42 @@ namespace SaaSForge.Api.Controllers
             }
         }
 
+        //[AllowAnonymous]
+        //[HttpPost("confirm-email")]
+        //public async Task<IActionResult> ConfirmEmail([FromBody] ConfirmEmailDto dto)
+        //{
+        //    if (!ModelState.IsValid)
+        //    {
+        //        return BadRequest(ModelState);
+        //    }
+
+        //    var email = dto.Email.Trim();
+        //    var user = await _userManager.FindByEmailAsync(email);
+
+        //    if (user == null)
+        //    {
+        //        return BadRequest(new { message = "Invalid verification request." });
+        //    }
+
+        //    if (user.EmailConfirmed)
+        //    {
+        //        return Ok(new { message = "Email is already verified." });
+        //    }
+
+        //    var result = await _userManager.ConfirmEmailAsync(user, dto.Token);
+
+        //    if (!result.Succeeded)
+        //    {
+        //        return BadRequest(new
+        //        {
+        //            message = "Email verification failed.",
+        //            errors = result.Errors.Select(e => e.Description).ToList()
+        //        });
+        //    }
+
+        //    return Ok(new { message = "Email verified successfully." });
+        //}
+
         [AllowAnonymous]
         [HttpPost("confirm-email")]
         public async Task<IActionResult> ConfirmEmail([FromBody] ConfirmEmailDto dto)
@@ -1290,6 +1312,27 @@ namespace SaaSForge.Api.Controllers
                     message = "Email verification failed.",
                     errors = result.Errors.Select(e => e.Description).ToList()
                 });
+            }
+
+            // ✅ SEND WELCOME EMAIL (AFTER SUCCESSFUL VERIFICATION)
+            try
+            {
+                var frontendBaseUrl = _config["ClientApp:BaseUrl"]?.TrimEnd('/');
+
+                if (!string.IsNullOrWhiteSpace(frontendBaseUrl))
+                {
+                    await _emailService.SendWelcomeEmailAsync(
+                        user.Email!,
+                        user.FullName ?? user.Email!,
+                        $"{frontendBaseUrl}/login"
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Welcome email sending failed after email verification for user {UserId}",
+                    user.Id);
             }
 
             return Ok(new { message = "Email verified successfully." });
