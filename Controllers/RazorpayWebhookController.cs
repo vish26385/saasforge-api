@@ -24,6 +24,14 @@ public class RazorpayWebhookController : ControllerBase
         _paymentActivationService = paymentActivationService;
     }
 
+
+    [HttpGet]
+    [AllowAnonymous]
+    public IActionResult Ping()
+    {
+        return Ok(new { message = "Razorpay webhook route is reachable." });
+    }
+
     [HttpPost]
     [AllowAnonymous]
     public async Task<IActionResult> Handle()
