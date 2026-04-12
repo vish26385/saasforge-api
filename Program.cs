@@ -536,7 +536,7 @@ builder.Services.AddScoped<IAiService, AiService>();
 builder.Services.AddScoped<IUsageService, UsageService>();
 builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
 builder.Services.AddScoped<IPaymentActivationService, PaymentActivationService>();
-builder.Services.AddScoped<GoogleTokenValidatorService>();
+builder.Services.AddScoped<IGoogleTokenValidatorService, GoogleTokenValidatorService>();
 
 builder.Services.AddScoped<ILeadService, LeadService>();
 builder.Services.AddScoped<ILeadAiService, LeadAiService>();
