@@ -906,7 +906,8 @@ namespace SaaSForge.Api.Controllers
 
             try
             {
-                payload = await _googleTokenValidatorService.ValidateAsync(dto.IdToken);
+                //payload = await _googleTokenValidatorService.ValidateAsync(dto.IdToken);
+                payload = await _googleTokenValidatorService.ValidateAuthorizationCodeAsync(dto.Code);
             }
             catch
             {
