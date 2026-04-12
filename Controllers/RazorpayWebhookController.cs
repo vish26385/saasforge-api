@@ -32,6 +32,71 @@ public class RazorpayWebhookController : ControllerBase
         return Ok(new { message = "Razorpay webhook route is reachable." });
     }
 
+    //[HttpPost]
+    //[AllowAnonymous]
+    //public async Task<IActionResult> Handle()
+    //{
+    //    Request.EnableBuffering();
+
+    //    string body;
+    //    using (var reader = new StreamReader(Request.Body, Encoding.UTF8, leaveOpen: true))
+    //    {
+    //        body = await reader.ReadToEndAsync();
+    //        Request.Body.Position = 0;
+    //    }
+
+    //    var signature = Request.Headers["X-Razorpay-Signature"].FirstOrDefault();
+    //    var webhookSecret = _configuration["Razorpay:WebhookSecret"];
+
+    //    if (string.IsNullOrWhiteSpace(signature) || string.IsNullOrWhiteSpace(webhookSecret))
+    //        return Unauthorized();
+
+    //    if (!IsValidWebhookSignature(body, signature, webhookSecret))
+    //        return Unauthorized();
+
+    //    using var doc = JsonDocument.Parse(body);
+    //    var root = doc.RootElement;
+
+    //    var eventType = root.GetProperty("event").GetString() ?? "";
+    //    var eventId = root.GetProperty("payload").ToString() + "|" + eventType; // fallback if no top-level id
+
+    //    var existingLog = await _context.Set<PaymentWebhookLog>()
+    //        .FirstOrDefaultAsync(x => x.EventId == eventId);
+
+    //    if (existingLog != null)
+    //        return Ok();
+
+    //    var log = new PaymentWebhookLog
+    //    {
+    //        EventId = eventId,
+    //        EventType = eventType,
+    //        PayloadJson = body,
+    //        ReceivedAtUtc = DateTime.UtcNow,
+    //        Processed = false
+    //    };
+
+    //    _context.Add(log);
+    //    await _context.SaveChangesAsync();
+
+    //    switch (eventType)
+    //    {
+    //        case "payment.captured":
+    //        case "order.paid":
+    //            await HandleSuccessfulPayment(root);
+    //            break;
+
+    //        case "payment.failed":
+    //            await HandleFailedPayment(root);
+    //            break;
+    //    }
+
+    //    log.Processed = true;
+    //    log.ProcessedAtUtc = DateTime.UtcNow;
+    //    await _context.SaveChangesAsync();
+
+    //    return Ok();
+    //}
+
     [HttpPost]
     [AllowAnonymous]
     public async Task<IActionResult> Handle()
@@ -57,8 +122,24 @@ public class RazorpayWebhookController : ControllerBase
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
 
-        var eventType = root.GetProperty("event").GetString() ?? "";
-        var eventId = root.GetProperty("payload").ToString() + "|" + eventType; // fallback if no top-level id
+        var eventType = root.GetProperty("event").GetString() ?? string.Empty;
+
+        // Prefer a payment-based unique key for dedupe
+        string? paymentId = null;
+
+        if (root.TryGetProperty("payload", out var payload))
+        {
+            if (payload.TryGetProperty("payment", out var paymentNode) &&
+                paymentNode.TryGetProperty("entity", out var paymentEntity) &&
+                paymentEntity.TryGetProperty("id", out var paymentIdNode))
+            {
+                paymentId = paymentIdNode.GetString();
+            }
+        }
+
+        var eventId = !string.IsNullOrWhiteSpace(paymentId)
+            ? $"{eventType}|{paymentId}"
+            : $"{eventType}|{body.GetHashCode()}";
 
         var existingLog = await _context.Set<PaymentWebhookLog>()
             .FirstOrDefaultAsync(x => x.EventId == eventId);
@@ -81,7 +162,6 @@ public class RazorpayWebhookController : ControllerBase
         switch (eventType)
         {
             case "payment.captured":
-            case "order.paid":
                 await HandleSuccessfulPayment(root);
                 break;
 
