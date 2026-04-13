@@ -691,7 +691,7 @@ namespace SaaSForge.Api.Controllers
         private readonly AppDbContext _context;
         private readonly IEmailService _emailService;
         private readonly IWebHostEnvironment _env;
-        private readonly GoogleTokenValidatorService _googleTokenValidatorService;
+        private readonly IGoogleTokenValidatorService _googleTokenValidatorService;
         private readonly ILogger<AuthController> _logger;
 
         public AuthController(
@@ -702,7 +702,7 @@ namespace SaaSForge.Api.Controllers
             AppDbContext context,
             IEmailService emailService,
             IWebHostEnvironment env,
-            GoogleTokenValidatorService googleTokenValidatorService,
+            IGoogleTokenValidatorService googleTokenValidatorService,
             ILogger<AuthController> logger)
         {
             _userManager = userManager;
@@ -909,9 +909,13 @@ namespace SaaSForge.Api.Controllers
                 //payload = await _googleTokenValidatorService.ValidateAsync(dto.IdToken);
                 payload = await _googleTokenValidatorService.ValidateAuthorizationCodeAsync(dto.Code);
             }
-            catch
+            catch (Exception ex)
             {
-                return Unauthorized(new { message = "Invalid Google ID token." });
+                return StatusCode(500, new
+                {
+                    message = "Google login failed.",
+                    error = ex.Message
+                });
             }
 
             if (string.IsNullOrWhiteSpace(payload.Subject) ||
