@@ -79,7 +79,7 @@ namespace SaaSForge.Api.Services.Ai
             _context.AiConversations.Add(entity);
             await _context.SaveChangesAsync();
 
-            await _usageService.IncrementAiUsageAsync(business.Id);
+            //await _usageService.IncrementAiUsageAsync(business.Id);
 
             var usage = await _usageService.GetOrCreateUsageAsync(business.Id);
 

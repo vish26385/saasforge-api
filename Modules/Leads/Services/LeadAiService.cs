@@ -113,7 +113,23 @@ public class LeadAiService : ILeadAiService
         };
 
         _context.LeadAiSuggestions.Add(suggestion);
-        await _context.SaveChangesAsync();
+
+        try
+        {
+            await _context.SaveChangesAsync();
+
+            // ✅ Increment ONLY after successful save
+            await _usageService.IncrementAiUsageAsync(businessId);
+        }
+        catch (Exception ex)
+        {
+            // ❌ DO NOT increment usage
+            // ❌ DO NOT silently ignore
+
+            throw new InvalidOperationException(
+                "AI reply was generated but failed to save. Please try again.",
+                ex);
+        }
 
         await _leadActivityService.AddAsync(
             businessId,
