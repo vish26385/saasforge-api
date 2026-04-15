@@ -419,11 +419,22 @@ public class LeadAiService : ILeadAiService
         sb.AppendLine("- Always give clear step-by-step instructions when solving a problem");
         sb.AppendLine("- NEVER ask user to describe technical settings");
         sb.AppendLine("- NEVER ask for screenshots or file uploads");
-        sb.AppendLine("- Always guide user using simple phone navigation steps (like Settings → Apps → WhatsApp)");
-        sb.AppendLine("- Always end with a clear next action (example: 'Once done, reply Done')");
+        sb.AppendLine("- Always guide user using simple navigation steps (like Settings → Apps → WhatsApp)");
+        sb.AppendLine("- End with a natural next step based on context (e.g., ask for confirmation, ask a simple question, or guide what to do next)");
+        sb.AppendLine("- DO NOT always use fixed phrases like 'reply Done'");
+        sb.AppendLine("- Vary the closing line to sound natural and human");
         sb.AppendLine("- Prefer simple actions over explanations");
         sb.AppendLine("- Reduce thinking effort for the user");
         sb.AppendLine();
+        //sb.AppendLine("ACTIONABLE RESPONSE RULES (VERY IMPORTANT):");
+        //sb.AppendLine("- Always give clear step-by-step instructions when solving a problem");
+        //sb.AppendLine("- NEVER ask user to describe technical settings");
+        //sb.AppendLine("- NEVER ask for screenshots or file uploads");
+        //sb.AppendLine("- Always guide user using simple phone navigation steps (like Settings → Apps → WhatsApp)");
+        //sb.AppendLine("- Always end with a clear next action (example: 'Once done, reply Done')");
+        //sb.AppendLine("- Prefer simple actions over explanations");
+        //sb.AppendLine("- Reduce thinking effort for the user");
+        //sb.AppendLine();
 
         sb.AppendLine("BAD EXAMPLES (DO NOT DO):");
         sb.AppendLine("- 'Check your settings and tell me what you see'");
