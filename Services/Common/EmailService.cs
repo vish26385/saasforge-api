@@ -190,6 +190,7 @@ namespace SaaSForge.Api.Services.Common
         Task<bool> SendPasswordResetSuccessAsync(string toEmail, string userName, string loginUrl);
         Task<bool> SendWelcomeEmailAsync(string toEmail, string userName, string loginUrl);
         Task<bool> SendNotificationEmailAsync(string toEmail, string subject, string heading, string message, string actionUrl, string actionText);
+        Task SendContactEmailAsync(string name, string email, string subject, string message);
     }
 
     public class EmailService : IEmailService
@@ -198,17 +199,20 @@ namespace SaaSForge.Api.Services.Common
         private readonly ILogger<EmailService> _logger;
         private readonly ResendSettings _settings;
         private readonly EmailTemplateService _templateService;
+        private readonly IConfiguration _configuration;
 
         public EmailService(
             HttpClient httpClient,
             ILogger<EmailService> logger,
             IOptions<ResendSettings> options,
-            EmailTemplateService templateService)
+            EmailTemplateService templateService,
+            IConfiguration configuration)
         {
             _httpClient = httpClient;
             _logger = logger;
             _settings = options.Value;
             _templateService = templateService;
+            _configuration = configuration;
         }
 
         public async Task<bool> SendEmailVerificationAsync(string toEmail, string userName, string verificationLink)
@@ -401,6 +405,63 @@ namespace SaaSForge.Api.Services.Common
                     subject);
 
                 return false;
+            }
+        }
+
+        public async Task SendContactEmailAsync(string name, string email, string subject, string message)
+        {
+            var apiKey = _configuration["Resend:ApiKey"];
+            var fromEmail = _configuration["Resend:ContactFromEmail"];
+            var toEmail = _configuration["Resend:ContactToEmail"];
+
+            if (string.IsNullOrWhiteSpace(apiKey))
+                throw new Exception("Resend API key is missing.");
+
+            if (string.IsNullOrWhiteSpace(fromEmail))
+                throw new Exception("Resend FromEmail is missing.");
+
+            if (string.IsNullOrWhiteSpace(toEmail))
+                throw new Exception("Resend ToEmail is missing.");
+
+            var html = $@"
+                <div style='font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#111827;'>
+                    <h2 style='margin-bottom:16px;'>New Contact Form Submission</h2>
+
+                    <p><strong>Name:</strong> {System.Net.WebUtility.HtmlEncode(name)}</p>
+                    <p><strong>Email:</strong> {System.Net.WebUtility.HtmlEncode(email)}</p>
+                    <p><strong>Subject:</strong> {System.Net.WebUtility.HtmlEncode(subject)}</p>
+
+                    <div style='margin-top:16px;'>
+                        <strong>Message:</strong>
+                        <div style='margin-top:8px;padding:12px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb;white-space:pre-wrap;'>
+                            {System.Net.WebUtility.HtmlEncode(message)}
+                        </div>
+                    </div>
+                </div>";
+
+            var payload = new
+            {
+                from = $"VISHNEXA <{fromEmail}>",
+                to = new[] { toEmail },
+                reply_to = email,
+                subject = $"[VISHNEXA Contact] {subject}",
+                html
+            };
+
+            var request = new HttpRequestMessage(HttpMethod.Post, "https://api.resend.com/emails");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+            request.Content = new StringContent(
+                JsonSerializer.Serialize(payload),
+                Encoding.UTF8,
+                "application/json"
+            );
+
+            var response = await _httpClient.SendAsync(request);
+            var responseBody = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new Exception($"Resend send failed: {response.StatusCode} - {responseBody}");
             }
         }
     }

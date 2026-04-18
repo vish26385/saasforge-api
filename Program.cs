@@ -476,7 +476,9 @@ builder.Services.AddAuthentication(options =>
 var allowedOrigins = new[]
 {
     "http://localhost:3000",
-    "https://leadflow.vishnexa.com"
+    "https://leadflow.vishnexa.com",
+    "https://vishnexa.com",
+    "https://www.vishnexa.com"
 };
 
 builder.Services.AddCors(options =>
